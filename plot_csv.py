@@ -10,17 +10,16 @@ import scienceplots  # noqa: F401  (plt.style.use が参照する)
 
 # ==================== 各種設定はここで変更する ====================
 
-CSV_PATH = Path("ping.csv")            # 入力CSVファイル
+CSV_PATH = Path("input.csv")            # 入力CSVファイル
 
-SERIES = ["Sim-n78", "Sim-n257"]       # プロットする系列名(CSVの列名)。指定した系列のみプロットする
+SERIES = ["Series1", "Series2"]        # プロットする系列名(CSVの列名)。指定した系列のみプロットする
 LABELS = None                          # 凡例名。Noneなら全てCSVの列名。数が足りない分もCSVの列名で補う
-                                        # 例: LABELS = ["Sim n78", "Sim n257"]
 
 XLABEL = None                          # X軸ラベル。Noneならデータから自動
-YLABEL = "RTT (ms)"                    # Y軸ラベル
+YLABEL = "None"                        # Y軸ラベル
 
 XMIN, XMAX = None, None                # X軸の範囲 (Noneならデータから自動)
-YMIN, YMAX = 0, 100                    # Y軸の範囲 (Noneならデータから自動)
+YMIN, YMAX = None, None                # Y軸の範囲 (Noneならデータから自動)
 
 XSCALE = "linear"                      # X軸のスケール ("linear" または "log")
 YSCALE = "linear"                      # Y軸のスケール ("linear" または "log")

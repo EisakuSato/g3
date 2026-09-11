@@ -12,15 +12,15 @@ from plot_csv import _UNSET, resolve, resolve_labels
 
 # ==================== 各種設定はここで変更する ====================
 
-CSV_PATH = Path("ping.csv")            # 入力CSVファイル
+CSV_PATH = Path("input.csv")            # 入力CSVファイル
 
-SERIES = ["Sim-n257", "Sim-n78", "HW-n78"]         # ヒストグラム化する系列名(CSVの列名)
+SERIES = ["Series1", "Series2", "Series3"]         # ヒストグラム化する系列名(CSVの列名)
 LABELS = None                          # 凡例名。Noneなら全てCSVの列名。数が足りない分もCSVの列名で補う
 
-XLABEL = "RTT (ms)"                    # X軸ラベル
-YLABEL = "Frequency (count)"           # Y軸ラベル
+XLABEL = "X"                           # X軸ラベル
+YLABEL = "Y"                           # Y軸ラベル
 
-XMIN, XMAX = None, 1300                # X軸(ビン)の範囲 (Noneならデータから自動)
+XMIN, XMAX = None, None                # X軸(ビン)の範囲 (Noneならデータから自動)
 YMIN, YMAX = None, None                # Y軸の範囲 (Noneならデータから自動)
 
 XSCALE = "linear"                      # X軸のスケール ("linear" または "log")
