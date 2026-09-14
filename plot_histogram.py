@@ -7,7 +7,19 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import scienceplots  # noqa: F401  (referenced by plt.style.use)
 
-from plot_csv import _UNSET, apply_style, merge_series_spec, resolve, select_series
+from plot_csv import (
+    _UNSET,
+    LEGEND_LOCS,
+    PALETTES,
+    apply_legend,
+    apply_style,
+    compute_figsize,
+    merge_series_spec,
+    resolve,
+    resolve_legend_loc,
+    resolve_palette,
+    select_series,
+)
 
 
 # ==================== Edit the settings below ====================
@@ -23,7 +35,7 @@ SERIES = {
 # per-series overrides.
 # Allowed keys: label, color, alpha
 # Any key left unset falls back to the DEFAULT_* value below. If color is left
-# unset, colors are assigned automatically from the Tableau palette.
+# unset, colors are assigned automatically from PALETTE.
 # Example:
 # SERIES = {
 #     "Series1": {"label": "Series 1", "color": "tab:red", "alpha": 0.4},
@@ -43,6 +55,18 @@ N_BINS = 100                           # Number of bins
 DEFAULT_ALPHA = 0.6                    # Default histogram transparency when a series has no override
 
 STYLE = ["science", "ieee"]            # scienceplots style
+PALETTE = PALETTES["tableau"]          # Color cycle: a list of colors, one of PALETTES[...],
+                                        # or None to use STYLE's own colors unmodified
+
+LEGEND_LOC = "best"                    # Legend location (matplotlib loc string), or None to hide it
+LEGEND_NCOL = 1                        # Number of legend columns (< number of series wraps into multiple rows)
+LEGEND_OUTSIDE = False                 # Place the legend below the plot instead of inside it
+
+WIDTH_RATIO, HEIGHT_RATIO = None, None  # Aspect ratio as two numbers (e.g. 4, 3 for 4:3).
+                                         # Keeps STYLE's figure width and scales the height to match.
+                                         # None, None = use STYLE's own figure size unmodified
+GRID = False                            # Show a background grid
+TICK_FONTSIZE = None                    # Tick label font size. None = STYLE's own size
 
 OUTPUT = None                          # Output file name. None = <CSV_PATH>_hist.pdf
 DPI = 600                              # Output image DPI
@@ -72,6 +96,23 @@ def parse_args():
     parser.add_argument("--bins", type=int, default=_UNSET, dest="n_bins", help="Number of bins")
     parser.add_argument("--alpha", type=float, default=_UNSET, help="Default histogram transparency when a series has no override")
     parser.add_argument("--style", nargs="+", default=_UNSET, help="scienceplots style")
+    parser.add_argument(
+        "--palette", choices=[*PALETTES, "none"], default=_UNSET,
+        help="Color palette preset ('none' = use STYLE's own colors unmodified)",
+    )
+    parser.add_argument(
+        "--legend-loc", choices=[*LEGEND_LOCS, "none"], default=_UNSET,
+        help="Legend location ('none' hides the legend)",
+    )
+    parser.add_argument("--legend-ncol", type=int, default=_UNSET, help="Number of legend columns")
+    parser.add_argument(
+        "--legend-outside", dest="legend_outside", action="store_true", default=_UNSET,
+        help="Place the legend below the plot instead of inside it",
+    )
+    parser.add_argument("--width-ratio", type=float, default=_UNSET, help="Aspect ratio width component")
+    parser.add_argument("--height-ratio", type=float, default=_UNSET, help="Aspect ratio height component")
+    parser.add_argument("--grid", action="store_true", default=_UNSET, help="Show a background grid")
+    parser.add_argument("--tick-fontsize", type=float, default=_UNSET, help="Tick label font size")
     parser.add_argument("--output", "-o", type=Path, default=_UNSET, help="Output file name")
     parser.add_argument("--dpi", type=int, default=_UNSET, help="Output image DPI")
     return parser.parse_args()
@@ -93,6 +134,14 @@ def main():
     n_bins = resolve(args.n_bins, N_BINS)
     default_alpha = resolve(args.alpha, DEFAULT_ALPHA)
     style = resolve(args.style, STYLE)
+    palette = resolve_palette(args.palette, PALETTE)
+    legend_loc = resolve_legend_loc(args.legend_loc, LEGEND_LOC)
+    legend_ncol = resolve(args.legend_ncol, LEGEND_NCOL)
+    legend_outside = resolve(args.legend_outside, LEGEND_OUTSIDE)
+    width_ratio = resolve(args.width_ratio, WIDTH_RATIO)
+    height_ratio = resolve(args.height_ratio, HEIGHT_RATIO)
+    grid = resolve(args.grid, GRID)
+    tick_fontsize = resolve(args.tick_fontsize, TICK_FONTSIZE)
     output = resolve(args.output, OUTPUT)
     dpi = resolve(args.dpi, DPI)
 
@@ -116,8 +165,8 @@ def main():
 
     defaults = {"color": None, "alpha": default_alpha}
 
-    apply_style(style)
-    fig, ax = plt.subplots()
+    apply_style(style, palette)
+    fig, ax = plt.subplots(figsize=compute_figsize(width_ratio, height_ratio))
 
     for col, overrides in series.items():
         spec = merge_series_spec(col, overrides, defaults)
@@ -129,7 +178,11 @@ def main():
     ax.set_yscale(yscale)
     ax.set_xlim(xmin, xmax)
     ax.set_ylim(ymin, ymax)
-    ax.legend(frameon=False)
+    apply_legend(ax, legend_loc, legend_ncol, legend_outside)
+    if grid:
+        ax.grid(True, alpha=0.3)
+    if tick_fontsize is not None:
+        ax.tick_params(labelsize=tick_fontsize)
 
     fig.tight_layout()
 

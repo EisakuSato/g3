@@ -33,17 +33,22 @@ class ChartType:
     default_ylabel: str
     series_fields: Callable[[str, str], dict]      # (col, key_prefix) -> extra per-series settings UI
     draw: Callable[[object, pd.DataFrame, dict, dict], None]  # (ax, df, series, ctx) -> None
+    field_keys: dict                               # override key -> widget key suffix (see series_fields),
+                                                    # used by app.py to restore a saved config into session_state
 
 
 # ==================== Line plot ====================
 
+_LINE_FIELD_KEYS = {"linestyle": "ls", "linewidth": "lw", "marker": "marker", "markersize": "ms"}
+
+
 def _line_series_fields(col: str, key_prefix: str) -> dict:
     c1, c2, c3, c4 = st.columns(4)
     return {
-        "linestyle": c1.selectbox("Line style", LINESTYLES, index=0, key=f"{key_prefix}_{col}_ls"),
-        "linewidth": c2.number_input("Line width", value=1.0, step=0.1, key=f"{key_prefix}_{col}_lw"),
-        "marker": c3.selectbox("Marker", MARKERS, index=0, key=f"{key_prefix}_{col}_marker"),
-        "markersize": c4.number_input("Marker size", value=4.0, step=0.5, key=f"{key_prefix}_{col}_ms"),
+        "linestyle": c1.selectbox("Line style", LINESTYLES, index=0, key=f"{key_prefix}_{col}_{_LINE_FIELD_KEYS['linestyle']}"),
+        "linewidth": c2.number_input("Line width", value=1.0, step=0.1, key=f"{key_prefix}_{col}_{_LINE_FIELD_KEYS['linewidth']}"),
+        "marker": c3.selectbox("Marker", MARKERS, index=0, key=f"{key_prefix}_{col}_{_LINE_FIELD_KEYS['marker']}"),
+        "markersize": c4.number_input("Marker size", value=4.0, step=0.5, key=f"{key_prefix}_{col}_{_LINE_FIELD_KEYS['markersize']}"),
     }
 
 
@@ -71,13 +76,17 @@ LINE = ChartType(
     default_ylabel="Value",
     series_fields=_line_series_fields,
     draw=_draw_line,
+    field_keys=_LINE_FIELD_KEYS,
 )
 
 
 # ==================== Histogram ====================
 
+_HIST_FIELD_KEYS = {"alpha": "alpha"}
+
+
 def _hist_series_fields(col: str, key_prefix: str) -> dict:
-    return {"alpha": st.slider("Transparency (alpha)", 0.0, 1.0, 0.6, key=f"{key_prefix}_{col}_alpha")}
+    return {"alpha": st.slider("Transparency (alpha)", 0.0, 1.0, 0.6, key=f"{key_prefix}_{col}_{_HIST_FIELD_KEYS['alpha']}")}
 
 
 def compute_bin_edges(value_min: float, value_max: float, xscale: str, n_bins: int) -> list:
@@ -113,6 +122,7 @@ HIST = ChartType(
     default_ylabel="Frequency (count)",
     series_fields=_hist_series_fields,
     draw=_draw_hist,
+    field_keys=_HIST_FIELD_KEYS,
 )
 
 
