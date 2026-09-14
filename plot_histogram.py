@@ -5,71 +5,75 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import pandas as pd
-import scienceplots  # noqa: F401  (plt.style.use が参照する)
+import scienceplots  # noqa: F401  (referenced by plt.style.use)
 
 from plot_csv import _UNSET, apply_style, merge_series_spec, resolve, select_series
 
 
-# ==================== 各種設定はここで変更する ====================
+# ==================== Edit the settings below ====================
 
-CSV_PATH = Path("input.csv")            # 入力CSVファイル
+CSV_PATH = Path("input.csv")            # Input CSV file
 
 SERIES = {
     "Series1": {},
     "Series2": {},
     "Series3": {},
 }
-# ヒストグラム化する系列。キー: CSVの列名、値: 系列ごとに上書きする設定の辞書。
-# 指定できるキー: label, color, alpha
-# 未指定のキーは下のDEFAULT_*の値を使う。colorを指定しなければTableau配色から自動で割り当てる。
-# 例:
+# Series to turn into histograms. Key: CSV column name. Value: dict of
+# per-series overrides.
+# Allowed keys: label, color, alpha
+# Any key left unset falls back to the DEFAULT_* value below. If color is left
+# unset, colors are assigned automatically from the Tableau palette.
+# Example:
 # SERIES = {
-#     "Series1": {"label": "系列1", "color": "tab:red", "alpha": 0.4},
+#     "Series1": {"label": "Series 1", "color": "tab:red", "alpha": 0.4},
 #     "Series2": {},
 # }
 
-XLABEL = "X"                           # X軸ラベル
-YLABEL = "Y"                           # Y軸ラベル
+XLABEL = "X"                           # X-axis label
+YLABEL = "Y"                           # Y-axis label
 
-XMIN, XMAX = None, None                # X軸(ビン)の範囲 (Noneならデータから自動)
-YMIN, YMAX = None, None                # Y軸の範囲 (Noneならデータから自動)
+XMIN, XMAX = None, None                # X-axis (bin) range (None = inferred from the data)
+YMIN, YMAX = None, None                # Y-axis range (None = inferred from the data)
 
-XSCALE = "linear"                      # X軸のスケール ("linear" または "log")
-YSCALE = "linear"                      # Y軸のスケール ("linear" または "log")
+XSCALE = "linear"                      # X-axis scale ("linear" or "log")
+YSCALE = "linear"                      # Y-axis scale ("linear" or "log")
 
-N_BINS = 100                           # ビン数
-DEFAULT_ALPHA = 0.6                    # 系列ごとに指定がない場合のヒストグラムの透過度
+N_BINS = 100                           # Number of bins
+DEFAULT_ALPHA = 0.6                    # Default histogram transparency when a series has no override
 
-STYLE = ["science", "ieee"]            # scienceplotsのスタイル
+STYLE = ["science", "ieee"]            # scienceplots style
 
-OUTPUT = None                          # 出力ファイル名。Noneなら <CSV_PATH>_hist.pdf
-DPI = 600                              # 出力画像のDPI
+OUTPUT = None                          # Output file name. None = <CSV_PATH>_hist.pdf
+DPI = 600                              # Output image DPI
 
 # ===================================================================
 
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="CSVの列からヒストグラムを作成する。未指定の項目はファイル冒頭のハードコード値を使う。",
+        description="Build a histogram from CSV columns. Any option left unset falls "
+                    "back to the hardcoded value at the top of this file.",
     )
-    parser.add_argument("csv", type=Path, nargs="?", default=_UNSET, help=f"入力CSVファイル (デフォルト: {CSV_PATH})")
+    parser.add_argument("csv", type=Path, nargs="?", default=_UNSET, help=f"Input CSV file (default: {CSV_PATH})")
     parser.add_argument(
         "--series", "-s", nargs="+", default=_UNSET,
-        help="ヒストグラム化する系列名(CSVの列名)。SERIES辞書にあれば系列ごとの設定を使う",
+        help="Series to turn into histograms (CSV column names). "
+             "Per-series overrides from the SERIES dict are used when present",
     )
-    parser.add_argument("--xlabel", default=_UNSET, help="X軸ラベル")
-    parser.add_argument("--ylabel", default=_UNSET, help="Y軸ラベル")
-    parser.add_argument("--xmin", type=float, default=_UNSET, help="X軸(ビン)の最小値")
-    parser.add_argument("--xmax", type=float, default=_UNSET, help="X軸(ビン)の最大値")
-    parser.add_argument("--ymin", type=float, default=_UNSET, help="Y軸の最小値")
-    parser.add_argument("--ymax", type=float, default=_UNSET, help="Y軸の最大値")
-    parser.add_argument("--xscale", choices=["linear", "log"], default=_UNSET, help="X軸のスケール")
-    parser.add_argument("--yscale", choices=["linear", "log"], default=_UNSET, help="Y軸のスケール")
-    parser.add_argument("--bins", type=int, default=_UNSET, dest="n_bins", help="ビン数")
-    parser.add_argument("--alpha", type=float, default=_UNSET, help="ヒストグラムの透過度(系列ごとに指定がない場合のデフォルト)")
-    parser.add_argument("--style", nargs="+", default=_UNSET, help="scienceplotsのスタイル")
-    parser.add_argument("--output", "-o", type=Path, default=_UNSET, help="出力ファイル名")
-    parser.add_argument("--dpi", type=int, default=_UNSET, help="出力画像のDPI")
+    parser.add_argument("--xlabel", default=_UNSET, help="X-axis label")
+    parser.add_argument("--ylabel", default=_UNSET, help="Y-axis label")
+    parser.add_argument("--xmin", type=float, default=_UNSET, help="X-axis (bin) minimum")
+    parser.add_argument("--xmax", type=float, default=_UNSET, help="X-axis (bin) maximum")
+    parser.add_argument("--ymin", type=float, default=_UNSET, help="Y-axis minimum")
+    parser.add_argument("--ymax", type=float, default=_UNSET, help="Y-axis maximum")
+    parser.add_argument("--xscale", choices=["linear", "log"], default=_UNSET, help="X-axis scale")
+    parser.add_argument("--yscale", choices=["linear", "log"], default=_UNSET, help="Y-axis scale")
+    parser.add_argument("--bins", type=int, default=_UNSET, dest="n_bins", help="Number of bins")
+    parser.add_argument("--alpha", type=float, default=_UNSET, help="Default histogram transparency when a series has no override")
+    parser.add_argument("--style", nargs="+", default=_UNSET, help="scienceplots style")
+    parser.add_argument("--output", "-o", type=Path, default=_UNSET, help="Output file name")
+    parser.add_argument("--dpi", type=int, default=_UNSET, help="Output image DPI")
     return parser.parse_args()
 
 
@@ -97,14 +101,14 @@ def main():
     unknown = [s for s in series if s not in df.columns]
     if unknown:
         available = ", ".join(df.columns)
-        raise SystemExit(f"未知の系列名: {unknown}\n利用可能な系列: {available}")
+        raise SystemExit(f"Unknown series: {unknown}\nAvailable series: {available}")
 
     columns = list(series)
     bin_min = xmin if xmin is not None else df[columns].min().min()
     bin_max = xmax if xmax is not None else df[columns].max().max()
     if xscale == "log":
         if bin_min <= 0:
-            raise SystemExit(f"xscaleがlogの場合、xminは正の値である必要がある (xmin={bin_min})")
+            raise SystemExit(f"xmin must be positive when xscale is log (xmin={bin_min})")
         ratio = bin_max / bin_min
         bin_edges = [bin_min * ratio ** (i / n_bins) for i in range(n_bins + 1)]
     else:
