@@ -331,11 +331,19 @@ def copy_to_clipboard_button(text: str, label: str = "Copy to clipboard") -> Non
     """
     components.html(
         f"""
-        <button id="g3-copy-btn" style="
-            padding: 0.25rem 0.75rem; font-size: 0.875rem; border-radius: 0.5rem;
-            border: 1px solid rgba(49, 51, 63, 0.2); background: transparent;
-            cursor: pointer;
-        ">{label}</button>
+        <style>
+            #g3-copy-btn {{
+                padding: 0.25rem 0.75rem; font-size: 0.875rem; border-radius: 0.5rem;
+                border: 1px solid rgba(49, 51, 63, 0.2); background: transparent;
+                color: #262730; cursor: pointer;
+            }}
+            @media (prefers-color-scheme: dark) {{
+                #g3-copy-btn {{
+                    border-color: rgba(250, 250, 250, 0.3); color: #fafafa;
+                }}
+            }}
+        </style>
+        <button id="g3-copy-btn">{label}</button>
         <script>
         (function() {{
             const btn = document.getElementById("g3-copy-btn");
