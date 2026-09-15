@@ -15,6 +15,8 @@ every time.
   "Adding a new chart type" below)
 - `config_io.py` - safely parses a saved/embedded config back into settings
   (used by the GUI's "Load a saved config" feature)
+- `Dockerfile` / `docker-compose.yml` - run the GUI as a shared service (see
+  "Deploying with Docker" below)
 
 ## Requirements
 
@@ -146,6 +148,40 @@ write yourself - can't run arbitrary code.
 One limitation: the GUI's manual (non-`scienceplots`) style settings (font
 family, spine visibility, tick direction) aren't part of this saved config,
 since they have no equivalent in the CLI scripts. Everything else round-trips.
+
+## Deploying with Docker
+
+To run the GUI as a shared service (e.g. so a team can all reach it over the
+internal network instead of everyone running `streamlit run` locally):
+
+```bash
+docker compose up -d --build
+# or without compose:
+docker build -t graph-tools .
+docker run -d -p 8501:8501 -v "$(pwd)/data:/data:ro" graph-tools
+```
+
+Open `http://<host>:8501`. `docker-compose.yml` mounts `./data` (on the host)
+read-only to `/data` (in the container) so the GUI's "...or enter a CSV path"
+field can point at CSVs the whole team shares (e.g. `/data/results.csv`) --
+that field reads paths inside the container, not on each user's own machine,
+so without a shared mount it's only really useful via "Upload a CSV" instead.
+Point the mount at wherever your team already keeps result CSVs, or drop it.
+
+Two things to know before rolling this out internally:
+- **Image size**: the `Dockerfile` installs TeX Live so the `scienceplots`
+  styles (`science`, `ieee`, ...) work, which makes the image ~1.9GB. If you
+  don't need those styles, remove that `apt-get install` layer from the
+  `Dockerfile` for a much smaller image -- the GUI's "Use scienceplots"
+  toggle already lets users fall back to LaTeX-free manual styling either way.
+- **No built-in auth**: Streamlit itself doesn't authenticate users. This
+  setup relies on the container only being reachable from inside the
+  corporate network (VPN/intranet, a firewalled host, ...). If you need
+  per-user auth, put it in front (e.g. an internal reverse proxy with SSO)
+  rather than in the app.
+- Sessions (widget state) are per-browser-tab and independent between users,
+  but everyone shares the same container process/resources -- fine for a
+  small internal team, but not load-tested for heavy concurrent use.
 
 ## Adding a new chart type
 

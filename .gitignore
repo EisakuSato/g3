@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Streamlit local config/secrets (e.g. .streamlit/secrets.toml)
+.streamlit/
+
+# Output PDFs from plot_csv.py / plot_histogram.py / the GUI's download button
+*.pdf
+
+# Input CSVs and the docker-compose shared-data mount -- this repo is the
+# tool, not any particular dataset
+*.csv
+/data/
+
+# OS / editor cruft
+.DS_Store
+.vscode/
+.idea/

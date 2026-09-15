@@ -1,0 +1,12 @@
+services:
+  graph-tools:
+    build: .
+    ports:
+      - "8501:8501"
+    volumes:
+      # Shared CSVs so the GUI's "...or enter a CSV path" field works for
+      # everyone (it reads paths inside the container, not on a user's own
+      # machine). Point this at wherever your team already keeps result CSVs,
+      # or drop the mount and rely on the "Upload a CSV" button instead.
+      - ./data:/data:ro
+    restart: unless-stopped
