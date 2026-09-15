@@ -54,7 +54,28 @@ PALETTE_LABELS = {
     "grayscale": "Grayscale",
 }
 
-st.set_page_config(page_title="Graph Tools GUI", layout="wide")
+# Each downloaded file gets the "Config for the scripts" text embedded in its
+# metadata where the format allows it (see build_config_text / the rendering
+# code near the bottom of main()), so a graph can be reproduced later even if
+# only the image file itself was kept. PDF has a standard 'Subject' field for
+# this; PNG/SVG don't, so 'Description' is used there instead (both are read
+# the same way by config_io.parse_config_text, which only cares about the
+# plain text, not which field it came from).
+#
+# EPS and TIFF have no metadata_key (None): TIFF's matplotlib backend rejects
+# the `metadata` kwarg outright, and EPS's only supports a single-line
+# `Creator` field, which the (multi-line) config text would corrupt -- DSC
+# comments like `%%Creator: ...` must be one line, and PostScript treats any
+# other stray text in the header as code to execute, not as a comment.
+OUTPUT_FORMATS = {
+    "pdf": {"label": "PDF (vector)", "mime": "application/pdf", "metadata_key": "Subject"},
+    "png": {"label": "PNG (raster)", "mime": "image/png", "metadata_key": "Description"},
+    "svg": {"label": "SVG (vector)", "mime": "image/svg+xml", "metadata_key": "Description"},
+    "eps": {"label": "EPS (vector)", "mime": "application/postscript", "metadata_key": None},
+    "tiff": {"label": "TIFF (raster)", "mime": "image/tiff", "metadata_key": None},
+}
+
+st.set_page_config(page_title="G3: GUI Graph Generator", layout="wide")
 
 
 # ==================== Data loading ====================
@@ -171,7 +192,7 @@ def apply_saved_config(text: str, df: pd.DataFrame):
     if chart_key not in CHART_TYPES:
         st.sidebar.error(
             "Could not tell which chart type this config is for (missing or unrecognized "
-            "'# graph-tools config: chart_type=...' header)."
+            "'# g3 config: chart_type=...' header)."
         )
         return
     chart_type = CHART_TYPES[chart_key]
@@ -278,7 +299,7 @@ def build_config_text(chart_type, series, settings: dict) -> str:
     """
     palette_expr = "None" if settings["palette_key"] == "none" else f"PALETTES[{settings['palette_key']!r}]"
 
-    lines = [f"# graph-tools config: chart_type={chart_type.key}", "SERIES = {"]
+    lines = [f"# g3 config: chart_type={chart_type.key}", "SERIES = {"]
     for col, overrides in series.items():
         items = ", ".join(f'"{k}": {v!r}' for k, v in overrides.items())
         lines.append(f'    "{col}": {{{items}}},')
@@ -309,8 +330,8 @@ def build_config_text(chart_type, series, settings: dict) -> str:
 # ==================== Main ====================
 
 def main():
-    st.title("Graph Tools GUI")
-    st.caption("A tool for tuning matplotlib parameters interactively")
+    st.title("G3: GUI Graph Generator")
+    st.caption("Create beautiful Matplotlib plots visually.")
 
     df, source_name = load_dataframe()
 
@@ -444,6 +465,13 @@ def main():
         if chart_type.needs_bins or (chart_type2 is not None and chart_type2.needs_bins) else None
     )
     dpi = st.sidebar.number_input("Output DPI", value=600, step=50, key="dpi_input")
+    output_format = st.sidebar.selectbox(
+        "Output format", list(OUTPUT_FORMATS), format_func=lambda k: OUTPUT_FORMATS[k]["label"],
+        help="PNG and TIFF are raster (DPI above sets their resolution); PDF, SVG, and EPS are "
+             "vector (DPI only affects any raster elements embedded in them). EPS and TIFF can't "
+             "carry the \"Config for the scripts\" text in their metadata like the others do.",
+        key="output_format_select",
+    )
 
     legend_loc_value = None if legend_hidden else legend_loc
 
@@ -558,17 +586,22 @@ def main():
         "tick_fontsize": tick_fontsize, "dpi": dpi, "n_bins": n_bins,
     })
 
+    format_info = OUTPUT_FORMATS[output_format]
+    save_kwargs = {"dpi": dpi}
+    if format_info["metadata_key"] is not None:
+        # metadata_key is a standard field for the chosen format (PDF: Subject, PNG/SVG:
+        # Description), so any tool that reads that format's metadata (Preview/Explorer file
+        # properties, Acrobat, exiftool, pdfinfo, Pillow's Image.text, ...) can read it back --
+        # unlike a custom key, which only specialized libraries pick up. EPS/TIFF have no
+        # metadata_key (see OUTPUT_FORMATS) and must not get a `metadata` kwarg at all.
+        save_kwargs["metadata"] = {"Keywords": "g3", format_info["metadata_key"]: config_text}
     buf = io.BytesIO()
-    fig.savefig(
-        buf, format="pdf", dpi=dpi,
-        # Subject is a standard PDF Info-dict field, so any PDF tool (Preview/Explorer file
-        # properties, Acrobat, exiftool, pdfinfo, ...) can read it back -- unlike a custom key,
-        # which only specialized libraries pick up.
-        metadata={"Keywords": "graph-tools", "Subject": config_text},
-    )
+    fig.savefig(buf, format=output_format, **save_kwargs)
     out_stem = f"{chart_type.key}_{chart_type2.key}" if use_secondary else chart_type.key
-    default_out = f"{Path(source_name).stem}_{out_stem}.pdf"
-    st.download_button("Download PDF", data=buf.getvalue(), file_name=default_out, mime="application/pdf")
+    default_out = f"{Path(source_name).stem}_{out_stem}.{output_format}"
+    st.download_button(
+        f"Download {output_format.upper()}", data=buf.getvalue(), file_name=default_out, mime=format_info["mime"],
+    )
 
     with st.expander("Config for the scripts (plot_csv.py / plot_histogram.py)", expanded=False):
         st.code(config_text, language="python")
@@ -582,16 +615,38 @@ def main():
                 "This config only describes the left (primary) axis -- the secondary axis is a "
                 "GUI-only overlay and isn't saved here or reproducible from the CLI scripts."
             )
-        st.caption(
-            "It's also embedded in the downloaded PDF itself, in the standard 'Subject' field of "
-            "the PDF's metadata -- so if you come back to a PDF later wanting to reproduce its "
-            "style, you don't need to have kept this text separately. Any PDF tool can read it "
-            "back (it's a standard field, not a custom one): file properties in Preview/Explorer, "
-            "Acrobat, `exiftool file.pdf`, `pdfinfo file.pdf`, or `PdfReader(\"file.pdf\").metadata.subject` "
-            "in Python (`pip install pypdf`). Paste the result back in here or into the CLI scripts -- "
-            "if your tool only shows the raw '/Subject (...)' entry instead of clean text, pasting "
-            "either the whole thing or just the part inside the parentheses both work."
-        )
+        if output_format == "pdf":
+            st.caption(
+                "It's also embedded in the downloaded PDF itself, in the standard 'Subject' field of "
+                "the PDF's metadata -- so if you come back to a PDF later wanting to reproduce its "
+                "style, you don't need to have kept this text separately. Any PDF tool can read it "
+                "back (it's a standard field, not a custom one): file properties in Preview/Explorer, "
+                "Acrobat, `exiftool file.pdf`, `pdfinfo file.pdf`, or `PdfReader(\"file.pdf\").metadata.subject` "
+                "in Python (`pip install pypdf`). Paste the result back in here or into the CLI scripts -- "
+                "if your tool only shows the raw '/Subject (...)' entry instead of clean text, pasting "
+                "either the whole thing or just the part inside the parentheses both work."
+            )
+        elif output_format in ("png", "svg"):
+            if output_format == "png":
+                python_hint = 'Image.open("file.png").text["Description"] (pip install pillow)'
+            else:
+                python_hint = 'the <dc:description> element after ET.parse("file.svg") -- or just open the SVG as text'
+            st.caption(
+                f"It's also embedded in the downloaded {output_format.upper()} itself, in its "
+                "'Description' metadata field -- so if you come back to the file later wanting to "
+                "reproduce its style, you don't need to have kept this text separately. Read it back "
+                f"with `exiftool file.{output_format}`, or in Python via `{python_hint}`. "
+                "Paste the result back in here or into the CLI scripts."
+            )
+        else:
+            st.caption(
+                f"Unlike PDF/PNG/SVG, {output_format.upper()} can't carry this text in its metadata "
+                "(TIFF's matplotlib writer rejects custom metadata outright; EPS only has a "
+                "single-line 'Creator' field, too small for this). Keep this text somewhere "
+                "yourself (a notes file, a commit message, ...) if you want to reproduce this "
+                "graph later -- or download a PDF/PNG/SVG alongside it if you want the "
+                "self-contained round-trip."
+            )
 
         if not use_scienceplots:
             st.caption(

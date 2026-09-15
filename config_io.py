@@ -13,9 +13,9 @@ ConfigParseError instead of running.
 import ast
 import re
 
-CONFIG_HEADER_RE = re.compile(r"#\s*graph-tools config:\s*chart_type=(\w+)")
+CONFIG_HEADER_RE = re.compile(r"#\s*g3 config:\s*chart_type=(\w+)")
 
-# Matches a raw PDF dictionary entry, e.g. '/Subject (# graph-tools config: ...\nSERIES = {...})',
+# Matches a raw PDF dictionary entry, e.g. '/Subject (# g3 config: ...\nSERIES = {...})',
 # as it looks when copied straight out of a PDF's bytes (a text editor, `strings`, `pdftk
 # dump_data`, ...) instead of through a PDF-aware tool. Those tools return the string already
 # decoded; a raw copy still has the PDF wrapper and PDF string escapes (\n, \(, \), \\).

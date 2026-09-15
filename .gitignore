@@ -6,8 +6,13 @@ __pycache__/
 # Streamlit local config/secrets (e.g. .streamlit/secrets.toml)
 .streamlit/
 
-# Output PDFs from plot_csv.py / plot_histogram.py / the GUI's download button
+# Output files from plot_csv.py / plot_histogram.py / the GUI's download button
 *.pdf
+*.png
+*.svg
+*.eps
+*.tiff
+*.tif
 
 # Input CSVs and the docker-compose shared-data mount -- this repo is the
 # tool, not any particular dataset

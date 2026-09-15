@@ -1,4 +1,6 @@
-# graph-tools
+# G3: GUI Graph Generator
+
+*Create beautiful Matplotlib plots visually.*
 
 Small helpers for turning a CSV into a publication-quality (IEEE-style)
 matplotlib figure, without re-tuning legends, axis ranges and ticks by hand
@@ -31,7 +33,7 @@ every time.
 
 ```bash
 git clone <this repo>
-cd graph-tools
+cd g3
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -95,7 +97,7 @@ This opens a browser tab where you can:
   the style's own colors untouched), aspect ratio, grid, tick label size,
   DPI, and either a `scienceplots` style or manual font/spine/tick settings
   (no LaTeX required)
-- see the plot update live and download it as a PDF
+- see the plot update live and download it as a PDF, PNG, SVG, EPS, or TIFF
 
 The GUI renders through the exact same `apply_style` / `compute_figsize` /
 `PALETTES` functions the CLI scripts use (all defined in `plot_csv.py`), so
@@ -113,10 +115,27 @@ secondary axis's auto-assigned colors are offset from the primary axis's so
 they don't collide.
 
 This is a GUI-only feature: the "Config for the scripts" text and the config
-embedded in the downloaded PDF only ever describe the primary (left) axis, so
-a graph using a secondary axis can't be reproduced from the CLI scripts or
+embedded in the downloaded file only ever describe the primary (left) axis,
+so a graph using a secondary axis can't be reproduced from the CLI scripts or
 fully restored via "Load a saved config" (loading a config always turns the
 secondary axis back off).
+
+### Output format
+
+"Output format" (in the sidebar, near DPI) switches the downloaded file
+between PDF, PNG, SVG, EPS, and TIFF. PDF, SVG, and EPS are vector (DPI only
+affects any raster elements embedded in them); PNG and TIFF are raster, so
+DPI sets their resolution directly. There's no equivalent setting in the CLI
+scripts because they don't need one: `plot_csv.py`/`plot_histogram.py`'s
+`OUTPUT`/`--output` just takes a filename, and matplotlib infers the format
+from its extension (`out.png`, `out.svg`, `out.eps`, `out.tiff`, ...).
+
+EPS and TIFF can't carry the embedded "Config for the scripts" text described
+below (TIFF's matplotlib writer rejects custom metadata outright; EPS only
+has a single-line `Creator` field, too small for this multi-line text, and
+stuffing it in there anyway would corrupt the file's PostScript header). Use
+PDF/PNG/SVG instead if you want that self-contained round-trip, or just keep
+the config text yourself for an EPS/TIFF render.
 
 ## Reproducing a graph later
 
@@ -130,15 +149,23 @@ used, as plain Python assignments. You can:
    sidebar) to restore that exact session - chart type, series, axes, style,
    legend, palette, everything. Keep the text somewhere (a notes file, a
    commit message, ...) if you want to get back to a specific graph later.
-3. **Do nothing and come back to the PDF itself** - the same text is embedded
-   in the downloaded PDF's standard `Subject` metadata field, so it survives
-   even if you only kept the PDF. Read it back with any PDF tool (Preview/
-   Explorer file properties, Acrobat, `exiftool file.pdf`, `pdfinfo file.pdf`,
-   or `PdfReader("file.pdf").metadata.subject` via `pip install pypdf`) and
-   paste the result into option 1 or 2 above. If your tool only shows the raw
-   `/Subject (...)` entry instead of clean text, pasting either the whole
-   thing or just the part inside the parentheses both work - the GUI
-   auto-detects and un-escapes it.
+3. **Do nothing and come back to the downloaded file itself** (PDF/PNG/SVG
+   only - see "Output format" above for why EPS/TIFF can't do this) - the
+   same text is embedded in its metadata, so it survives even if you only
+   kept the image: PDF's standard `Subject` field, or PNG/SVG's `Description`
+   field (SVG's Dublin Core `dc:description`). Read it back with:
+   - PDF: any PDF tool (Preview/Explorer file properties, Acrobat,
+     `exiftool file.pdf`, `pdfinfo file.pdf`, or
+     `PdfReader("file.pdf").metadata.subject` via `pip install pypdf`)
+   - PNG: `exiftool file.png`, or `Image.open("file.png").text["Description"]`
+     via `pip install pillow`
+   - SVG: `exiftool file.svg`, or just open the file as text/XML and look for
+     `<dc:description>`
+
+   Then paste the result into option 1 or 2 above. For PDF, if your tool only
+   shows the raw `/Subject (...)` entry instead of clean text, pasting either
+   the whole thing or just the part inside the parentheses both work - the
+   GUI auto-detects and un-escapes it.
 
 The parser behind option 2/3 (`config_io.py`) only evaluates plain literals
 via `ast.literal_eval` (plus one special case for `PALETTE = PALETTES[...]`);
@@ -157,8 +184,8 @@ internal network instead of everyone running `streamlit run` locally):
 ```bash
 docker compose up -d --build
 # or without compose:
-docker build -t graph-tools .
-docker run -d -p 8501:8501 -v "$(pwd)/data:/data:ro" graph-tools
+docker build -t g3 .
+docker run -d -p 8501:8501 -v "$(pwd)/data:/data:ro" g3
 ```
 
 Open `http://<host>:8501`. `docker-compose.yml` mounts `./data` (on the host)
