@@ -126,4 +126,105 @@ HIST = ChartType(
 )
 
 
-CHART_TYPES = {ct.key: ct for ct in [LINE, HIST]}
+# ==================== PDF / CDF / CCDF ====================
+# All three reuse the histogram's bin-edge computation (compute_bin_edges) so
+# they bin the same way histograms do, just with matplotlib's hist()
+# density/cumulative options doing the normalization.
+
+_PDF_FIELD_KEYS = {"alpha": "alpha"}
+
+
+def _pdf_series_fields(col: str, key_prefix: str) -> dict:
+    return {"alpha": st.slider("Transparency (alpha)", 0.0, 1.0, 0.6, key=f"{key_prefix}_{col}_{_PDF_FIELD_KEYS['alpha']}")}
+
+
+def _draw_pdf(ax, df: pd.DataFrame, series: dict, ctx: dict) -> None:
+    columns = list(series)
+    bin_min = ctx["xmin"] if ctx["xmin"] is not None else df[columns].min().min()
+    bin_max = ctx["xmax"] if ctx["xmax"] is not None else df[columns].max().max()
+    bin_edges = compute_bin_edges(bin_min, bin_max, ctx["xscale"], ctx["n_bins"])
+    for col, overrides in series.items():
+        spec = merge_series_spec(col, overrides, ctx["chart_defaults"])
+        ax.hist(df[col], bins=bin_edges, density=True, alpha=spec["alpha"], color=spec["color"], label=spec["label"])
+
+
+PDF = ChartType(
+    key="pdf",
+    display="PDF",
+    uses_x_column=False,
+    needs_bins=True,
+    series_defaults={"color": None, "alpha": 0.6},
+    default_xlabel=lambda df: "Value",
+    default_ylabel="Probability density",
+    series_fields=_pdf_series_fields,
+    draw=_draw_pdf,
+    field_keys=_PDF_FIELD_KEYS,
+)
+
+
+_CUM_FIELD_KEYS = {"linewidth": "lw"}
+
+
+def _cum_series_fields(col: str, key_prefix: str) -> dict:
+    return {
+        "linewidth": st.slider(
+            "Line width", 0.5, 5.0, 1.5, step=0.1, key=f"{key_prefix}_{col}_{_CUM_FIELD_KEYS['linewidth']}",
+        ),
+    }
+
+
+def _draw_cdf(ax, df: pd.DataFrame, series: dict, ctx: dict) -> None:
+    columns = list(series)
+    bin_min = ctx["xmin"] if ctx["xmin"] is not None else df[columns].min().min()
+    bin_max = ctx["xmax"] if ctx["xmax"] is not None else df[columns].max().max()
+    bin_edges = compute_bin_edges(bin_min, bin_max, ctx["xscale"], ctx["n_bins"])
+    for col, overrides in series.items():
+        spec = merge_series_spec(col, overrides, ctx["chart_defaults"])
+        ax.hist(
+            df[col], bins=bin_edges, density=True, cumulative=True, histtype="step",
+            linewidth=spec["linewidth"], color=spec["color"], label=spec["label"],
+        )
+
+
+CDF = ChartType(
+    key="cdf",
+    display="CDF",
+    uses_x_column=False,
+    needs_bins=True,
+    series_defaults={"color": None, "linewidth": 1.5},
+    default_xlabel=lambda df: "Value",
+    default_ylabel="Cumulative probability",
+    series_fields=_cum_series_fields,
+    draw=_draw_cdf,
+    field_keys=_CUM_FIELD_KEYS,
+)
+
+
+def _draw_ccdf(ax, df: pd.DataFrame, series: dict, ctx: dict) -> None:
+    columns = list(series)
+    bin_min = ctx["xmin"] if ctx["xmin"] is not None else df[columns].min().min()
+    bin_max = ctx["xmax"] if ctx["xmax"] is not None else df[columns].max().max()
+    bin_edges = compute_bin_edges(bin_min, bin_max, ctx["xscale"], ctx["n_bins"])
+    for col, overrides in series.items():
+        spec = merge_series_spec(col, overrides, ctx["chart_defaults"])
+        ax.hist(
+            df[col], bins=bin_edges, density=True, cumulative=-1, histtype="step",
+            linewidth=spec["linewidth"], color=spec["color"], label=spec["label"],
+        )
+
+
+CCDF = ChartType(
+    key="ccdf",
+    display="CCDF",
+    uses_x_column=False,
+    needs_bins=True,
+    series_defaults={"color": None, "linewidth": 1.5},
+    default_xlabel=lambda df: "Value",
+    default_ylabel="P(X > x)",
+    series_fields=_cum_series_fields,
+    draw=_draw_ccdf,
+    field_keys=_CUM_FIELD_KEYS,
+)
+
+
+CHART_TYPES = {ct.key: ct for ct in [LINE, HIST, PDF, CDF, CCDF]}

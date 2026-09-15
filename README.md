@@ -8,7 +8,9 @@ every time.
 - `plot_histogram.py` - histograms
 - `app.py` - a Streamlit GUI that wraps both, with a live preview, so you can
   find the right settings interactively before baking them into the scripts
-  above (or just keep using the GUI - see "Reproducing a graph later" below)
+  above (or just keep using the GUI - see "Reproducing a graph later" below).
+  It also has chart types with no CLI equivalent (PDF, CDF, CCDF) and a
+  secondary-axis overlay - see "Usage: GUI" below
 - `chart_types.py` - the registry the GUI uses to add new chart types (see
   "Adding a new chart type" below)
 - `config_io.py` - safely parses a saved/embedded config back into settings
@@ -71,6 +73,10 @@ To customize a series (label, color, line style, marker, alpha, ...), edit
 the `SERIES` dict at the top of the file - see the comment block above it in
 each script for the available keys.
 
+There's no `plot_pdf.py`/`plot_cdf.py`/`plot_ccdf.py` CLI script: PDF, CDF and
+CCDF (see below) are GUI-only chart types for now, built from the same
+CSV-of-independent-distributions shape as `plot_histogram.py`.
+
 ## Usage: GUI
 
 ```bash
@@ -80,7 +86,8 @@ streamlit run app.py
 This opens a browser tab where you can:
 - load a CSV (upload, or point at a path), or try it with generated sample
   data
-- pick a chart type, choose which columns to plot and in what order
+- pick a chart type (Line plot, Histogram, PDF, CDF, CCDF), choose which
+  columns to plot and in what order
 - adjust labels, axis ranges/scales, legend (location, multiple columns for
   multi-row legends, placing it outside the plot), a color palette (or leave
   the style's own colors untouched), aspect ratio, grid, tick label size,
@@ -88,10 +95,26 @@ This opens a browser tab where you can:
   (no LaTeX required)
 - see the plot update live and download it as a PDF
 
-The GUI renders through the exact same `apply_style` / `apply_legend` /
-`compute_figsize` / `PALETTES` functions the CLI scripts use (all defined in
-`plot_csv.py`), so what you see in the preview matches what the CLI scripts
-produce from the same settings.
+The GUI renders through the exact same `apply_style` / `compute_figsize` /
+`PALETTES` functions the CLI scripts use (all defined in `plot_csv.py`), so
+what you see in the preview matches what the CLI scripts produce from the
+same settings.
+
+### Secondary axis
+
+Turn on "Add a secondary axis (right)" to overlay a second chart type on a
+right-hand y-axis sharing the same x-axis - e.g. a PDF on the left and a CDF
+on the right, or any other combination of chart types. Both axes get their
+own chart type, columns, y-axis label/scale/range; the x-axis (label, scale,
+range) is shared. The two axes' legends are merged into one, and the
+secondary axis's auto-assigned colors are offset from the primary axis's so
+they don't collide.
+
+This is a GUI-only feature: the "Config for the scripts" text and the config
+embedded in the downloaded PDF only ever describe the primary (left) axis, so
+a graph using a secondary axis can't be reproduced from the CLI scripts or
+fully restored via "Load a saved config" (loading a config always turns the
+secondary axis back off).
 
 ## Reproducing a graph later
 
@@ -129,8 +152,12 @@ since they have no equivalent in the CLI scripts. Everything else round-trips.
 `app.py` only handles what's common to every chart type (data loading, axes,
 style, legend, output). Chart-type-specific behavior (extra per-series
 settings, the actual drawing code) lives in `chart_types.py` as a
-`ChartType`. To add one (e.g. a scatter plot or CDF/CCDF), follow the `LINE`
-/ `HIST` examples in that file and register it in `CHART_TYPES` - `app.py`
+`ChartType`. To add one (e.g. a scatter plot), follow the `LINE` / `HIST` /
+`PDF` examples in that file and register it in `CHART_TYPES` - `app.py`
 should not need to change. Give it a `field_keys` mapping (override key ->
 widget key suffix) too, so its per-series settings can be restored by the
 "Load a saved config" feature like the built-in chart types.
+
+Because `ChartType.draw` only ever receives the `ax` it should draw on, any
+chart type also works as a secondary axis for free - the secondary-axis
+overlay in the GUI just calls `draw` a second time on `ax.twinx()`.

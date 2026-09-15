@@ -11,11 +11,18 @@ types (extra per-series settings, the actual drawing code) lives in
 chart_types.py; adding a new chart type (scatter plot, CDF/CCDF, etc.) only
 means adding a ChartType there.
 
-apply_style / apply_legend / compute_figsize / PALETTES are all reused
-directly from plot_csv.py (also shared by plot_histogram.py), so the preview
-here renders identically to what the CLI scripts produce. Once you've dialed
-in values here, the "Config for the scripts" section at the bottom lets you
-copy them back into plot_csv.py / plot_histogram.py's hardcoded settings.
+apply_style / compute_figsize / PALETTES are all reused directly from
+plot_csv.py (also shared by plot_histogram.py), so the preview here renders
+identically to what the CLI scripts produce. Once you've dialed in values
+here, the "Config for the scripts" section at the bottom lets you copy them
+back into plot_csv.py / plot_histogram.py's hardcoded settings.
+
+Optionally, a second chart type can be overlaid on a secondary y-axis
+(ax.twinx()) sharing the same x-axis -- e.g. a PDF on the left and a CDF on
+the right. This is a GUI-only feature: the "Config for the scripts" text and
+downloaded PDF's embedded config only ever describe the primary (left) axis,
+since plot_csv.py/plot_histogram.py and the config save/restore format don't
+have a secondary-axis concept.
 """
 
 import io
@@ -29,7 +36,7 @@ from cycler import cycler
 
 from chart_types import CHART_TYPES
 from config_io import ConfigParseError, parse_config_text
-from plot_csv import LEGEND_LOCS, PALETTES, apply_legend, apply_style, compute_figsize
+from plot_csv import LEGEND_LOCS, PALETTES, apply_style, compute_figsize
 
 FONT_FAMILIES = ["sans-serif", "serif", "monospace"]
 TICK_DIRECTIONS = ["out", "in", "inout"]
@@ -180,7 +187,9 @@ def apply_saved_config(text: str, df: pd.DataFrame):
             )
             return
 
-    updates = {"chart_type_radio": chart_key, "use_scienceplots_checkbox": True}
+    # A saved config only ever describes the primary (left) axis, so restoring one
+    # always turns the secondary axis off rather than leaving a stale overlay on.
+    updates = {"chart_type_radio": chart_key, "use_scienceplots_checkbox": True, "use_secondary_checkbox": False}
 
     def set_if_present(config_key, session_key, transform=lambda v: v):
         if config_key in values:
@@ -215,9 +224,10 @@ def apply_saved_config(text: str, df: pd.DataFrame):
     set_if_present("N_BINS", "n_bins_input", int)
 
     if series is not None:
-        updates[f"{chart_key}_select"] = list(series.keys())
+        key_prefix = f"ax1_{chart_key}"
+        updates[f"{key_prefix}_select"] = list(series.keys())
         for col, overrides in series.items():
-            prefix = f"{chart_key}_{col}"
+            prefix = f"{key_prefix}_{col}"
             updates[f"{prefix}_label"] = overrides.get("label", col)
             has_color = "color" in overrides
             updates[f"{prefix}_autocolor"] = not has_color
@@ -230,6 +240,33 @@ def apply_saved_config(text: str, df: pd.DataFrame):
     for key, value in updates.items():
         st.session_state[key] = value
     st.rerun()
+
+
+def offset_palette_colors(palette_colors: list, offset: int) -> list:
+    """Rotate a palette so it continues from `offset` instead of restarting at
+    index 0. Used for the secondary axis, whose Axes (ax.twinx()) has its own
+    independent color cycle -- without this, its first auto-colored series
+    would collide with the primary axis's first series.
+    """
+    offset %= len(palette_colors)
+    return palette_colors[offset:] + palette_colors[:offset]
+
+
+def assign_offset_colors(series: dict, palette_colors: list) -> dict:
+    """Fill in an explicit color (from the already-offset palette) for every
+    series that doesn't have a manual color override, instead of leaving
+    color=None (which would let matplotlib auto-assign from the start of
+    ax2's own cycle and collide with the primary axis's colors).
+    """
+    result = {}
+    i = 0
+    for col, overrides in series.items():
+        overrides = dict(overrides)
+        if "color" not in overrides:
+            overrides["color"] = palette_colors[i % len(palette_colors)]
+            i += 1
+        result[col] = overrides
+    return result
 
 
 def build_config_text(chart_type, series, settings: dict) -> str:
@@ -273,7 +310,7 @@ def build_config_text(chart_type, series, settings: dict) -> str:
 
 def main():
     st.title("Graph Tools GUI")
-    st.caption("A tool for tuning plot_csv.py / plot_histogram.py parameters interactively")
+    st.caption("A tool for tuning matplotlib parameters interactively")
 
     df, source_name = load_dataframe()
 
@@ -288,21 +325,36 @@ def main():
         st.dataframe(df.head(20), width="stretch")
 
     chart_key = st.sidebar.radio(
-        "2. Chart type", list(CHART_TYPES.keys()), format_func=lambda k: CHART_TYPES[k].display,
+        "2. Chart type (left axis)", list(CHART_TYPES.keys()), format_func=lambda k: CHART_TYPES[k].display,
         key="chart_type_radio",
     )
     chart_type = CHART_TYPES[chart_key]
 
+    use_secondary = st.sidebar.checkbox(
+        "Add a secondary axis (right)", value=False,
+        help="Overlay a second chart type on a right-hand y-axis sharing the same x-axis "
+             "(e.g. PDF on the left, CDF on the right).",
+        key="use_secondary_checkbox",
+    )
+    chart_type2 = None
+    if use_secondary:
+        chart_key2 = st.sidebar.radio(
+            "2b. Chart type (right axis)", list(CHART_TYPES.keys()), format_func=lambda k: CHART_TYPES[k].display,
+            key="chart_type2_radio",
+        )
+        chart_type2 = CHART_TYPES[chart_key2]
+
     st.sidebar.subheader("3. Axes & appearance")
     xlabel = st.sidebar.text_input("X-axis label", value=chart_type.default_xlabel(df), key="xlabel_input")
-    ylabel = st.sidebar.text_input("Y-axis label", value=chart_type.default_ylabel, key="ylabel_input")
-    c1, c2 = st.sidebar.columns(2)
-    xscale = c1.selectbox("X scale", ["linear", "log"], key="xscale_select")
-    yscale = c2.selectbox("Y scale", ["linear", "log"], key="yscale_select")
-
+    xscale = st.sidebar.selectbox("X scale", ["linear", "log"], key="xscale_select")
     c3, c4 = st.sidebar.columns(2)
     xmin_s = c3.text_input("Xmin (blank = auto)", value="", key="xmin_input")
     xmax_s = c4.text_input("Xmax (blank = auto)", value="", key="xmax_input")
+
+    st.sidebar.markdown("**Left y-axis**" if use_secondary else "**Y-axis**")
+    ylabel = st.sidebar.text_input("Y-axis label", value=chart_type.default_ylabel, key="ylabel_input")
+    c1, c2 = st.sidebar.columns(2)
+    yscale = c1.selectbox("Y scale", ["linear", "log"], key="yscale_select")
     c5, c6 = st.sidebar.columns(2)
     ymin_s = c5.text_input("Ymin (blank = auto)", value="", key="ymin_input")
     ymax_s = c6.text_input("Ymax (blank = auto)", value="", key="ymax_input")
@@ -317,6 +369,21 @@ def main():
     except ValueError:
         st.sidebar.error("Axis range values must be numbers")
         st.stop()
+
+    ylabel2 = yscale2 = ymin2 = ymax2 = None
+    if use_secondary:
+        st.sidebar.markdown("**Right y-axis**")
+        ylabel2 = st.sidebar.text_input("Y-axis label (right)", value=chart_type2.default_ylabel, key="ylabel2_input")
+        c7, c8 = st.sidebar.columns(2)
+        yscale2 = c7.selectbox("Y scale (right)", ["linear", "log"], key="yscale2_select")
+        c9, c10 = st.sidebar.columns(2)
+        ymin2_s = c9.text_input("Ymin, right (blank = auto)", value="", key="ymin2_input")
+        ymax2_s = c10.text_input("Ymax, right (blank = auto)", value="", key="ymax2_input")
+        try:
+            ymin2, ymax2 = parse_opt_float(ymin2_s), parse_opt_float(ymax2_s)
+        except ValueError:
+            st.sidebar.error("Axis range values must be numbers")
+            st.stop()
 
     use_scienceplots = st.sidebar.checkbox(
         "Use scienceplots", value=True,
@@ -374,21 +441,35 @@ def main():
     grid_on = st.sidebar.checkbox("Show grid", value=False, key="grid_checkbox")
     n_bins = (
         st.sidebar.number_input("Number of bins", value=100, step=10, key="n_bins_input")
-        if chart_type.needs_bins else None
+        if chart_type.needs_bins or (chart_type2 is not None and chart_type2.needs_bins) else None
     )
     dpi = st.sidebar.number_input("Output DPI", value=600, step=50, key="dpi_input")
 
     legend_loc_value = None if legend_hidden else legend_loc
 
-    st.subheader("4. Series settings")
+    st.subheader("4. Series settings — left axis" if use_secondary else "4. Series settings")
     x_col = df.columns[0] if chart_type.uses_x_column else None
     candidate_cols = list(df.columns[1:]) if chart_type.uses_x_column else list(df.columns)
     palette_colors = PALETTES[palette_key] if palette_key != "none" else PALETTES["tableau"]
-    series = series_controls(candidate_cols, chart_type, chart_type.key, palette_colors)
+    series = series_controls(candidate_cols, chart_type, f"ax1_{chart_type.key}", palette_colors)
 
     if not series:
         st.warning("Select at least one series")
         st.stop()
+
+    series2 = {}
+    x_col2 = None
+    if use_secondary:
+        st.subheader("4b. Series settings — right axis")
+        x_col2 = df.columns[0] if chart_type2.uses_x_column else None
+        candidate_cols2 = list(df.columns[1:]) if chart_type2.uses_x_column else list(df.columns)
+        palette_colors2 = offset_palette_colors(palette_colors, len(series))
+        series2 = series_controls(candidate_cols2, chart_type2, f"ax2_{chart_type2.key}", palette_colors2)
+        series2 = assign_offset_colors(series2, palette_colors2)
+
+        if not series2:
+            st.warning("Select at least one series for the right axis")
+            st.stop()
 
     # ==================== Rendering ====================
     plt.rcdefaults()  # reset every run so a previous style (scienceplots/manual) doesn't leak through
@@ -405,6 +486,7 @@ def main():
         st.stop()
 
     fig, ax = plt.subplots(figsize=compute_figsize(width_ratio, height_ratio))
+    ax2 = ax.twinx() if use_secondary else None
 
     ctx = {
         "x_col": x_col,
@@ -423,11 +505,43 @@ def main():
         ax.set_yscale(yscale)
         ax.set_xlim(xmin, xmax)
         ax.set_ylim(ymin, ymax)
-        apply_legend(ax, legend_loc_value, int(legend_ncol), legend_outside)
+
+        if use_secondary:
+            ctx2 = {
+                "x_col": x_col2,
+                "xmin": xmin,
+                "xmax": xmax,
+                "xscale": xscale,
+                "n_bins": n_bins,
+                "chart_defaults": chart_type2.series_defaults,
+            }
+            chart_type2.draw(ax2, df, series2, ctx2)
+            ax2.set_ylabel(ylabel2)
+            ax2.set_yscale(yscale2)
+            ax2.set_ylim(ymin2, ymax2)
+
+        # Merge handles/labels across both axes so a twinx() secondary axis still
+        # gets one combined legend instead of two separate ones.
+        axes_for_legend = [ax, ax2] if use_secondary else [ax]
+        handles, labels = [], []
+        for a in axes_for_legend:
+            h, l = a.get_legend_handles_labels()
+            handles += h
+            labels += l
+        if legend_loc_value is not None and handles:
+            legend_kwargs = {"frameon": False, "ncol": int(legend_ncol)}
+            if legend_outside:
+                legend_kwargs.update(loc="upper center", bbox_to_anchor=(0.5, -0.15))
+            else:
+                legend_kwargs["loc"] = legend_loc_value
+            ax.legend(handles, labels, **legend_kwargs)
+
         if grid_on:
             ax.grid(True, alpha=0.3)
         if tick_fontsize > 0:
             ax.tick_params(labelsize=tick_fontsize)
+            if use_secondary:
+                ax2.tick_params(labelsize=tick_fontsize)
         fig.tight_layout()
     except Exception as e:  # noqa: BLE001
         st.error(f"Failed to render the plot: {e}")
@@ -452,7 +566,8 @@ def main():
         # which only specialized libraries pick up.
         metadata={"Keywords": "graph-tools", "Subject": config_text},
     )
-    default_out = f"{Path(source_name).stem}_{chart_type.key}.pdf"
+    out_stem = f"{chart_type.key}_{chart_type2.key}" if use_secondary else chart_type.key
+    default_out = f"{Path(source_name).stem}_{out_stem}.pdf"
     st.download_button("Download PDF", data=buf.getvalue(), file_name=default_out, mime="application/pdf")
 
     with st.expander("Config for the scripts (plot_csv.py / plot_histogram.py)", expanded=False):
@@ -462,6 +577,11 @@ def main():
             "later to restore this exact graph, or into plot_csv.py/plot_histogram.py's "
             "hardcoded settings to reproduce it from the CLI."
         )
+        if use_secondary:
+            st.caption(
+                "This config only describes the left (primary) axis -- the secondary axis is a "
+                "GUI-only overlay and isn't saved here or reproducible from the CLI scripts."
+            )
         st.caption(
             "It's also embedded in the downloaded PDF itself, in the standard 'Subject' field of "
             "the PDF's metadata -- so if you come back to a PDF later wanting to reproduce its "
