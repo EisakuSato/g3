@@ -13,6 +13,7 @@ __pycache__/
 *.eps
 *.tiff
 *.tif
+!assets/favicon.png
 
 # Input CSVs and the docker-compose shared-data mount -- this repo is the
 # tool, not any particular dataset

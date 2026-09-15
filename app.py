@@ -68,7 +68,9 @@ OUTPUT_FORMATS = {
     "tiff": {"label": "TIFF (raster)", "mime": "image/tiff", "metadata_key": None},
 }
 
-st.set_page_config(page_title="G3: GUI Graph Generator", layout="wide")
+FAVICON_PATH = Path(__file__).parent / "assets" / "favicon.png"
+
+st.set_page_config(page_title="G3: GUI Graph Generator", page_icon=str(FAVICON_PATH), layout="wide")
 
 
 # ==================== Data loading ====================

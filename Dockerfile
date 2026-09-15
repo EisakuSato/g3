@@ -18,6 +18,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app.py chart_types.py config_io.py plotting.py ./
+COPY assets/ ./assets/
 
 EXPOSE 8501
 
