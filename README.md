@@ -10,7 +10,8 @@ every time.
   axes/style/legend/output with a live preview, and download the result. See
   "Usage" below.
 - `chart_types.py` - the registry the GUI uses to add new chart types (Line
-  plot, Histogram, PDF, CDF, CCDF) - see "Adding a new chart type" below
+  plot, Bar chart, Histogram, PDF, CDF, CCDF, Stem plot) - see "Adding a new
+  chart type" below
 - `plotting.py` - presentation-agnostic building blocks shared by every chart
   type: color palettes, scienceplots style application, figure sizing, and
   series-override merging
@@ -46,8 +47,8 @@ streamlit run app.py
 This opens a browser tab where you can:
 - load a CSV (upload, or point at a path), or try it with generated sample
   data
-- pick a chart type (Line plot, Histogram, PDF, CDF, CCDF), choose which
-  columns to plot and in what order
+- pick a chart type (Line plot, Bar chart, Histogram, PDF, CDF, CCDF, Stem
+  plot), choose which columns to plot and in what order
 - adjust labels, axis ranges/scales, legend (location, multiple columns for
   multi-row legends, placing it outside the plot), a color palette (or leave
   the style's own colors untouched), aspect ratio, grid, tick label size,
@@ -55,9 +56,10 @@ This opens a browser tab where you can:
   (no LaTeX required)
 - see the plot update live and download it as a PDF, PNG, SVG, EPS, or TIFF
 
-Line plots treat the first column as the X axis and every other selected
-column as a series to plot against it. Histogram/PDF/CDF/CCDF treat every
-selected column as an independent distribution (no dedicated X column).
+Line/Bar/Stem plots treat the first column as the X axis (categories, for Bar)
+and every other selected column as a series to plot against it.
+Histogram/PDF/CDF/CCDF treat every selected column as an independent
+distribution (no dedicated X column).
 
 ### Secondary axis
 

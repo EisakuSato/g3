@@ -302,4 +302,58 @@ BAR = ChartType(
 )
 
 
-CHART_TYPES = {ct.key: ct for ct in [LINE, BAR, HIST, PDF, CDF, CCDF]}
+# ==================== Stem plot ====================
+
+_STEM_FIELD_KEYS = {"marker": "marker", "markersize": "ms", "linewidth": "lw"}
+
+
+def _stem_series_fields(col: str, key_prefix: str) -> dict:
+    c1, c2, c3 = st.columns(3)
+    return {
+        "marker": c1.selectbox(
+            "Marker", [m for m in MARKERS if m != "None"], index=0, key=f"{key_prefix}_{col}_{_STEM_FIELD_KEYS['marker']}",
+        ),
+        "markersize": c2.number_input("Marker size", value=6.0, step=0.5, key=f"{key_prefix}_{col}_{_STEM_FIELD_KEYS['markersize']}"),
+        "linewidth": c3.number_input("Stem width", value=1.0, step=0.1, key=f"{key_prefix}_{col}_{_STEM_FIELD_KEYS['linewidth']}"),
+    }
+
+
+def _draw_stem(ax, df: pd.DataFrame, series: dict, ctx: dict) -> None:
+    x_col = ctx["x_col"]
+    for col, overrides in series.items():
+        spec = merge_series_spec(col, overrides, ctx["chart_defaults"])
+        # ax.stem(), unlike plot/bar/hist, doesn't fall back to the axes' own color
+        # cycle when no color is given (every call would come out "C0" blue), so
+        # a manual color is picked here to match how every other chart type
+        # auto-assigns a distinct color per series. The "k" in each fmt string
+        # below is just a placeholder overwritten by set_color() right after --
+        # it's there only so ax.stem() doesn't *also* pull a (throwaway, but
+        # cycle-advancing) color of its own for any fmt that omits one.
+        color = spec["color"] if spec["color"] is not None else ax._get_lines.get_next_color()
+        markerline, stemlines, baseline = ax.stem(
+            df[x_col], df[col], linefmt="k-", markerfmt=f"k{spec['marker']}", basefmt="k ",
+            label=spec["label"],
+        )
+        markerline.set_color(color)
+        markerline.set_markersize(spec["markersize"])
+        stemlines.set_color(color)
+        stemlines.set_linewidth(spec["linewidth"])
+
+
+STEM = ChartType(
+    key="stem",
+    display="Stem plot",
+    uses_x_column=True,
+    needs_bins=False,
+    series_defaults={"color": None, "marker": "o", "markersize": 6.0, "linewidth": 1.0},
+    default_xlabel=lambda df: df.columns[0],
+    default_ylabel="Value",
+    series_fields=_stem_series_fields,
+    draw=_draw_stem,
+    field_keys=_STEM_FIELD_KEYS,
+    csv_help="First column = X values. Each remaining column = one series (its header becomes the series name).",
+    sample_df=_XY_SAMPLE,
+)
+
+
+CHART_TYPES = {ct.key: ct for ct in [LINE, BAR, HIST, PDF, CDF, CCDF, STEM]}
