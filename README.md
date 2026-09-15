@@ -2,19 +2,18 @@
 
 *Create beautiful Matplotlib plots visually.*
 
-Small helpers for turning a CSV into a publication-quality (IEEE-style)
+A Streamlit GUI for turning a CSV into a publication-quality (IEEE-style)
 matplotlib figure, without re-tuning legends, axis ranges and ticks by hand
 every time.
 
-- `plot_csv.py` - line plots
-- `plot_histogram.py` - histograms
-- `app.py` - a Streamlit GUI that wraps both, with a live preview, so you can
-  find the right settings interactively before baking them into the scripts
-  above (or just keep using the GUI - see "Reproducing a graph later" below).
-  It also has chart types with no CLI equivalent (PDF, CDF, CCDF) and a
-  secondary-axis overlay - see "Usage: GUI" below
-- `chart_types.py` - the registry the GUI uses to add new chart types (see
-  "Adding a new chart type" below)
+- `app.py` - the Streamlit GUI: load a CSV, pick a chart type, adjust
+  axes/style/legend/output with a live preview, and download the result. See
+  "Usage" below.
+- `chart_types.py` - the registry the GUI uses to add new chart types (Line
+  plot, Histogram, PDF, CDF, CCDF) - see "Adding a new chart type" below
+- `plotting.py` - presentation-agnostic building blocks shared by every chart
+  type: color palettes, scienceplots style application, figure sizing, and
+  series-override merging
 - `config_io.py` - safely parses a saved/embedded config back into settings
   (used by the GUI's "Load a saved config" feature)
 - `Dockerfile` / `docker-compose.yml` - run the GUI as a shared service (see
@@ -24,10 +23,9 @@ every time.
 
 - Python 3.10+
 - A LaTeX installation (e.g. TeX Live) if you want to use the `scienceplots`
-  styles (`science`, `ieee`, ...). If you don't have LaTeX, use the CLI
-  scripts with `STYLE = []` / `--style` omitted, or use the GUI's "Use
-  scienceplots" toggle to turn it off and adjust fonts/spines/ticks manually
-  instead.
+  styles (`science`, `ieee`, ...). If you don't have LaTeX, use the GUI's
+  "Use scienceplots" toggle to turn it off and adjust fonts/spines/ticks
+  manually instead.
 
 ## Setup
 
@@ -39,49 +37,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## Usage: CLI scripts
-
-Each script has settings hardcoded near the top of the file (`SERIES`,
-`XLABEL`, `STYLE`, ...) with comments explaining each one, plus command-line
-flags that override them for one-off runs. Anything you don't pass on the
-command line falls back to the hardcoded value.
-
-```bash
-# Uses the hardcoded CSV_PATH / SERIES / etc. in the file
-python plot_csv.py
-
-# Override from the command line
-python plot_csv.py data.csv --series Series1 Series2 --xlabel "Time (s)" --output out.pdf
-
-python plot_histogram.py data.csv --series Series1 Series2 --bins 50 --xscale log
-
-# Legend, color palette, aspect ratio, grid, ticks
-python plot_csv.py data.csv --palette okabe-ito --legend-loc "lower center" \
-  --legend-ncol 2 --legend-outside --width-ratio 16 --height-ratio 9 \
-  --grid --tick-fontsize 8
-```
-
-Run `python plot_csv.py --help` / `python plot_histogram.py --help` for the
-full list of flags. Both scripts share the same set of presets for
-`--palette`/`PALETTE`: `tableau` (the default), `okabe-ito` (colorblind-safe),
-`set2`, `dark2`, `grayscale`, or `none` to leave `STYLE`'s own colors
-untouched.
-
-CSV format:
-- `plot_csv.py` treats the first column as the X axis and every other
-  selected column as a series to plot against it.
-- `plot_histogram.py` treats every selected column as an independent
-  distribution to histogram (no dedicated X column).
-
-To customize a series (label, color, line style, marker, alpha, ...), edit
-the `SERIES` dict at the top of the file - see the comment block above it in
-each script for the available keys.
-
-There's no `plot_pdf.py`/`plot_cdf.py`/`plot_ccdf.py` CLI script: PDF, CDF and
-CCDF (see below) are GUI-only chart types for now, built from the same
-CSV-of-independent-distributions shape as `plot_histogram.py`.
-
-## Usage: GUI
+## Usage
 
 ```bash
 streamlit run app.py
@@ -99,10 +55,9 @@ This opens a browser tab where you can:
   (no LaTeX required)
 - see the plot update live and download it as a PDF, PNG, SVG, EPS, or TIFF
 
-The GUI renders through the exact same `apply_style` / `compute_figsize` /
-`PALETTES` functions the CLI scripts use (all defined in `plot_csv.py`), so
-what you see in the preview matches what the CLI scripts produce from the
-same settings.
+Line plots treat the first column as the X axis and every other selected
+column as a series to plot against it. Histogram/PDF/CDF/CCDF treat every
+selected column as an independent distribution (no dedicated X column).
 
 ### Secondary axis
 
@@ -114,42 +69,35 @@ range) is shared. The two axes' legends are merged into one, and the
 secondary axis's auto-assigned colors are offset from the primary axis's so
 they don't collide.
 
-This is a GUI-only feature: the "Config for the scripts" text and the config
-embedded in the downloaded file only ever describe the primary (left) axis,
-so a graph using a secondary axis can't be reproduced from the CLI scripts or
-fully restored via "Load a saved config" (loading a config always turns the
-secondary axis back off).
+This is a GUI-only feature: the saved-config text and the config embedded in
+the downloaded file only ever describe the primary (left) axis, so a graph
+using a secondary axis can't be fully restored via "Load a saved config"
+(loading a config always turns the secondary axis back off).
 
 ### Output format
 
 "Output format" (in the sidebar, near DPI) switches the downloaded file
 between PDF, PNG, SVG, EPS, and TIFF. PDF, SVG, and EPS are vector (DPI only
 affects any raster elements embedded in them); PNG and TIFF are raster, so
-DPI sets their resolution directly. There's no equivalent setting in the CLI
-scripts because they don't need one: `plot_csv.py`/`plot_histogram.py`'s
-`OUTPUT`/`--output` just takes a filename, and matplotlib infers the format
-from its extension (`out.png`, `out.svg`, `out.eps`, `out.tiff`, ...).
+DPI sets their resolution directly.
 
-EPS and TIFF can't carry the embedded "Config for the scripts" text described
-below (TIFF's matplotlib writer rejects custom metadata outright; EPS only
-has a single-line `Creator` field, too small for this multi-line text, and
+EPS and TIFF can't carry the embedded saved-config text described below
+(TIFF's matplotlib writer rejects custom metadata outright; EPS only has a
+single-line `Creator` field, too small for this multi-line text, and
 stuffing it in there anyway would corrupt the file's PostScript header). Use
 PDF/PNG/SVG instead if you want that self-contained round-trip, or just keep
 the config text yourself for an EPS/TIFF render.
 
 ## Reproducing a graph later
 
-Every render has a "Config for the scripts" panel with the exact settings
-used, as plain Python assignments. You can:
+Every render has a "Saved config" panel with the exact settings used, as
+plain Python assignments. You can:
 
-1. **Paste it into `plot_csv.py`/`plot_histogram.py`** - it's written in the
-   same `SERIES = {...}` / `XLABEL = ...` shape as the hardcoded settings
-   block, so it drops in directly.
-2. **Paste it back into the GUI's "Load a saved config"** box (top of the
+1. **Paste it back into the GUI's "Load a saved config"** box (top of the
    sidebar) to restore that exact session - chart type, series, axes, style,
    legend, palette, everything. Keep the text somewhere (a notes file, a
    commit message, ...) if you want to get back to a specific graph later.
-3. **Do nothing and come back to the downloaded file itself** (PDF/PNG/SVG
+2. **Do nothing and come back to the downloaded file itself** (PDF/PNG/SVG
    only - see "Output format" above for why EPS/TIFF can't do this) - the
    same text is embedded in its metadata, so it survives even if you only
    kept the image: PDF's standard `Subject` field, or PNG/SVG's `Description`
@@ -162,19 +110,19 @@ used, as plain Python assignments. You can:
    - SVG: `exiftool file.svg`, or just open the file as text/XML and look for
      `<dc:description>`
 
-   Then paste the result into option 1 or 2 above. For PDF, if your tool only
+   Then paste the result into option 1 above. For PDF, if your tool only
    shows the raw `/Subject (...)` entry instead of clean text, pasting either
    the whole thing or just the part inside the parentheses both work - the
    GUI auto-detects and un-escapes it.
 
-The parser behind option 2/3 (`config_io.py`) only evaluates plain literals
-via `ast.literal_eval` (plus one special case for `PALETTE = PALETTES[...]`);
-it never executes the pasted text, so loading a config - even one you didn't
+The parser behind this (`config_io.py`) only evaluates plain literals via
+`ast.literal_eval` (plus one special case for `PALETTE = PALETTES[...]`); it
+never executes the pasted text, so loading a config - even one you didn't
 write yourself - can't run arbitrary code.
 
 One limitation: the GUI's manual (non-`scienceplots`) style settings (font
-family, spine visibility, tick direction) aren't part of this saved config,
-since they have no equivalent in the CLI scripts. Everything else round-trips.
+family, spine visibility, tick direction) aren't part of this saved config.
+Everything else round-trips.
 
 ## Deploying with Docker
 

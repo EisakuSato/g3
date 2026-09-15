@@ -1,13 +1,12 @@
-"""Safely parse a "Config for the scripts" block (as produced by app.py) back
-into a plain dict of values, so the GUI can restore a previously saved graph.
+"""Safely parse a saved-config block (as produced by app.py) back into a
+plain dict of values, so the GUI can restore a previously saved graph.
 
 The config text is plain Python assignments (SERIES = {...}, XLABEL = ...,
-etc.) -- exactly what a user would paste into plot_csv.py/plot_histogram.py.
-Rather than exec()'ing arbitrary pasted text (a real code-execution risk once
-this app is deployed somewhere with untrusted input), this only walks the
-parsed AST and evaluates literal values with ast.literal_eval, plus one
-special-cased pattern for PALETTE = PALETTES["name"]. Anything else raises
-ConfigParseError instead of running.
+etc.). Rather than exec()'ing arbitrary pasted text (a real code-execution
+risk once this app is deployed somewhere with untrusted input), this only
+walks the parsed AST and evaluates literal values with ast.literal_eval, plus
+one special-cased pattern for PALETTE = PALETTES["name"]. Anything else
+raises ConfigParseError instead of running.
 """
 
 import ast
@@ -41,7 +40,7 @@ def normalize_pasted_text(text: str) -> str:
     return _unescape_pdf_string(match.group("content"))
 
 # Top-level names we know how to restore. Anything else in the pasted text is
-# ignored (e.g. a stray CSV_PATH or OUTPUT line from a hand-edited script).
+# ignored (e.g. a stray comment or unrelated assignment from a hand-edited paste).
 KNOWN_KEYS = {
     "SERIES", "XLABEL", "YLABEL", "XMIN", "XMAX", "YMIN", "YMAX", "XSCALE", "YSCALE",
     "STYLE", "PALETTE", "LEGEND_LOC", "LEGEND_NCOL", "LEGEND_OUTSIDE",

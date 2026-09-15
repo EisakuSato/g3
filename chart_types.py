@@ -16,7 +16,7 @@ from typing import Callable
 import pandas as pd
 import streamlit as st
 
-from plot_csv import merge_series_spec
+from plotting import merge_series_spec
 
 LINESTYLES = ["-", "--", "-.", ":", "None"]
 MARKERS = ["o", "s", "^", "v", "D", "x", "+", "*", ".", "None"]

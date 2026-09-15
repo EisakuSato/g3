@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""Streamlit prototype for tuning plot_csv.py / plot_histogram.py parameters
-interactively, with a live preview.
+"""Streamlit GUI for turning a CSV into a publication-quality matplotlib figure.
 
 Run:
     streamlit run app.py
@@ -9,20 +8,15 @@ This file only handles the parts that are common to every chart type (data
 loading, axes/style/legend/output). Everything that differs between chart
 types (extra per-series settings, the actual drawing code) lives in
 chart_types.py; adding a new chart type (scatter plot, CDF/CCDF, etc.) only
-means adding a ChartType there.
-
-apply_style / compute_figsize / PALETTES are all reused directly from
-plot_csv.py (also shared by plot_histogram.py), so the preview here renders
-identically to what the CLI scripts produce. Once you've dialed in values
-here, the "Config for the scripts" section at the bottom lets you copy them
-back into plot_csv.py / plot_histogram.py's hardcoded settings.
+means adding a ChartType there. apply_style / compute_figsize / PALETTES live
+in plotting.py, shared by chart_types.py so every chart type styles the same
+way.
 
 Optionally, a second chart type can be overlaid on a secondary y-axis
 (ax.twinx()) sharing the same x-axis -- e.g. a PDF on the left and a CDF on
-the right. This is a GUI-only feature: the "Config for the scripts" text and
-downloaded PDF's embedded config only ever describe the primary (left) axis,
-since plot_csv.py/plot_histogram.py and the config save/restore format don't
-have a secondary-axis concept.
+the right. This is a GUI-only feature: the saved-config text and downloaded
+file's embedded config only ever describe the primary (left) axis, since the
+config save/restore format doesn't have a secondary-axis concept.
 """
 
 import io
@@ -36,14 +30,13 @@ from cycler import cycler
 
 from chart_types import CHART_TYPES
 from config_io import ConfigParseError, parse_config_text
-from plot_csv import LEGEND_LOCS, PALETTES, apply_style, compute_figsize
+from plotting import LEGEND_LOCS, PALETTES, apply_style, compute_figsize
 
 FONT_FAMILIES = ["sans-serif", "serif", "monospace"]
 TICK_DIRECTIONS = ["out", "in", "inout"]
 
 # "none" (mapped to PALETTE = None, i.e. leave the active style's own color
-# cycle untouched) plus every named preset from plot_csv.PALETTES, so the GUI
-# and CLI scripts always agree on what a palette name means.
+# cycle untouched) plus every named preset from plotting.PALETTES.
 PALETTE_CHOICES = ["none", *PALETTES]
 PALETTE_LABELS = {
     "none": "(style default)",
@@ -54,9 +47,9 @@ PALETTE_LABELS = {
     "grayscale": "Grayscale",
 }
 
-# Each downloaded file gets the "Config for the scripts" text embedded in its
-# metadata where the format allows it (see build_config_text / the rendering
-# code near the bottom of main()), so a graph can be reproduced later even if
+# Each downloaded file gets the saved-config text embedded in its metadata
+# where the format allows it (see build_config_text / the rendering code near
+# the bottom of main()), so a graph can be reproduced later even if
 # only the image file itself was kept. PDF has a standard 'Subject' field for
 # this; PNG/SVG don't, so 'Description' is used there instead (both are read
 # the same way by config_io.parse_config_text, which only cares about the
@@ -127,8 +120,7 @@ def load_dataframe():
 def apply_manual_style(params: dict):
     """Style the plot using plain matplotlib rcParams only, without scienceplots (i.e. no LaTeX).
     Leaves the color cycle untouched; the caller applies the chosen palette (see PALETTES).
-    This manual mode has no equivalent in plot_csv.py/plot_histogram.py: it exists purely
-    as a GUI convenience for previewing without a LaTeX install.
+    This exists purely as a GUI convenience for previewing without a LaTeX install.
     """
     plt.rcParams.update({
         "font.size": params["font_size"],
@@ -291,8 +283,7 @@ def assign_offset_colors(series: dict, palette_colors: list) -> dict:
 
 
 def build_config_text(chart_type, series, settings: dict) -> str:
-    """Build the "Config for the scripts" text: plain Python assignments,
-    pasteable into plot_csv.py/plot_histogram.py as-is, and parseable by
+    """Build the saved-config text: plain Python assignments, parseable by
     config_io.parse_config_text to restore this GUI session (see
     apply_saved_config) or to reconstruct the graph from a PDF it's later
     embedded into (see main()).
@@ -603,17 +594,16 @@ def main():
         f"Download {output_format.upper()}", data=buf.getvalue(), file_name=default_out, mime=format_info["mime"],
     )
 
-    with st.expander("Config for the scripts (plot_csv.py / plot_histogram.py)", expanded=False):
+    with st.expander("Saved config", expanded=False):
         st.code(config_text, language="python")
         st.caption(
             "Paste this whole block into the \"Load a saved config\" box (top of the sidebar) "
-            "later to restore this exact graph, or into plot_csv.py/plot_histogram.py's "
-            "hardcoded settings to reproduce it from the CLI."
+            "later to restore this exact graph."
         )
         if use_secondary:
             st.caption(
                 "This config only describes the left (primary) axis -- the secondary axis is a "
-                "GUI-only overlay and isn't saved here or reproducible from the CLI scripts."
+                "GUI-only overlay and isn't saved here."
             )
         if output_format == "pdf":
             st.caption(
@@ -622,7 +612,7 @@ def main():
                 "style, you don't need to have kept this text separately. Any PDF tool can read it "
                 "back (it's a standard field, not a custom one): file properties in Preview/Explorer, "
                 "Acrobat, `exiftool file.pdf`, `pdfinfo file.pdf`, or `PdfReader(\"file.pdf\").metadata.subject` "
-                "in Python (`pip install pypdf`). Paste the result back in here or into the CLI scripts -- "
+                "in Python (`pip install pypdf`). Paste the result back into \"Load a saved config\" -- "
                 "if your tool only shows the raw '/Subject (...)' entry instead of clean text, pasting "
                 "either the whole thing or just the part inside the parentheses both work."
             )
@@ -636,7 +626,7 @@ def main():
                 "'Description' metadata field -- so if you come back to the file later wanting to "
                 "reproduce its style, you don't need to have kept this text separately. Read it back "
                 f"with `exiftool file.{output_format}`, or in Python via `{python_hint}`. "
-                "Paste the result back in here or into the CLI scripts."
+                "Paste the result back into \"Load a saved config\"."
             )
         else:
             st.caption(
@@ -650,10 +640,9 @@ def main():
 
         if not use_scienceplots:
             st.caption(
-                "Manual style settings (fonts, spines, tick direction, etc.) have no equivalent "
-                "in plot_csv.py/plot_histogram.py, since they only ever style through scienceplots. "
-                "With STYLE=[] as above, matplotlib's defaults are used there instead; set an "
-                "explicit STYLE if you want a specific scienceplots look for the reproducible script."
+                "Manual style settings (fonts, spines, tick direction, etc.) aren't part of this "
+                "saved config, since they only ever apply when scienceplots is off. With STYLE=[] "
+                "as above, matplotlib's defaults are used instead of them."
             )
 
 
