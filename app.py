@@ -20,12 +20,14 @@ config save/restore format doesn't have a secondary-axis concept.
 """
 
 import io
+import json
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 from cycler import cycler
 
 from chart_types import CHART_TYPES
@@ -320,6 +322,58 @@ def build_config_text(chart_type, series, settings: dict) -> str:
     return "\n".join(lines)
 
 
+def copy_to_clipboard_button(text: str, label: str = "Copy to clipboard") -> None:
+    """A copy button that also works when the app is served over plain HTTP
+    on a non-localhost host (e.g. http://<lan-ip>:8501). Streamlit's own
+    st.code() copy icon uses navigator.clipboard, which browsers disable
+    outside secure contexts (https:// or localhost); this falls back to the
+    older execCommand("copy"), which has no such restriction.
+    """
+    components.html(
+        f"""
+        <button id="g3-copy-btn" style="
+            padding: 0.25rem 0.75rem; font-size: 0.875rem; border-radius: 0.5rem;
+            border: 1px solid rgba(49, 51, 63, 0.2); background: transparent;
+            cursor: pointer;
+        ">{label}</button>
+        <script>
+        (function() {{
+            const btn = document.getElementById("g3-copy-btn");
+            const text = {json.dumps(text)};
+            const defaultLabel = {json.dumps(label)};
+            function fallbackCopy() {{
+                const ta = document.createElement("textarea");
+                ta.value = text;
+                ta.style.position = "fixed";
+                ta.style.opacity = "0";
+                document.body.appendChild(ta);
+                ta.focus();
+                ta.select();
+                try {{ document.execCommand("copy"); }} catch (e) {{}}
+                document.body.removeChild(ta);
+            }}
+            btn.addEventListener("click", function() {{
+                const done = () => {{
+                    btn.innerText = "Copied!";
+                    setTimeout(() => {{ btn.innerText = defaultLabel; }}, 1500);
+                }};
+                if (window.isSecureContext && navigator.clipboard) {{
+                    navigator.clipboard.writeText(text).then(done, () => {{
+                        fallbackCopy();
+                        done();
+                    }});
+                }} else {{
+                    fallbackCopy();
+                    done();
+                }}
+            }});
+        }})();
+        </script>
+        """,
+        height=40,
+    )
+
+
 # ==================== Main ====================
 
 def main():
@@ -605,9 +659,13 @@ def main():
 
     with st.expander("Saved config", expanded=False):
         st.code(config_text, language="python")
+        copy_to_clipboard_button(config_text)
         st.caption(
             "Paste this whole block into the \"Load a saved config\" box (top of the sidebar) "
-            "later to restore this exact graph."
+            "later to restore this exact graph. If the copy icon on the code block above doesn't "
+            "do anything (this happens when the app is opened via a non-localhost http:// address, "
+            "since browsers restrict the clipboard API to secure contexts), use the \"Copy to "
+            "clipboard\" button below it instead."
         )
         if use_secondary:
             st.caption(
