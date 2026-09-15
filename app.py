@@ -344,6 +344,10 @@ def main():
     )
     chart_type = CHART_TYPES[chart_key]
 
+    with st.expander(f"CSV format for {chart_type.display}", expanded=False):
+        st.caption(chart_type.csv_help)
+        st.dataframe(chart_type.sample_df, width="stretch")
+
     use_secondary = st.sidebar.checkbox(
         "Add a secondary axis (right)", value=False,
         help="Overlay a second chart type on a right-hand y-axis sharing the same x-axis "
@@ -522,7 +526,10 @@ def main():
 
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)
-        ax.set_xscale(xscale)
+        if not chart_type.categorical_x:
+            # set_xscale() rebuilds the axis's tick locator/formatter, which would wipe out
+            # the fixed category labels a categorical chart type (e.g. bar) just set.
+            ax.set_xscale(xscale)
         ax.set_yscale(yscale)
         ax.set_xlim(xmin, xmax)
         ax.set_ylim(ymin, ymax)

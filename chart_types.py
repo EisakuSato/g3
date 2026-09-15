@@ -13,6 +13,7 @@ CHART_TYPES. app.py does not need to change.
 from dataclasses import dataclass
 from typing import Callable
 
+import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -20,6 +21,23 @@ from plotting import merge_series_spec
 
 LINESTYLES = ["-", "--", "-.", ":", "None"]
 MARKERS = ["o", "s", "^", "v", "D", "x", "+", "*", ".", "None"]
+
+# Sample dataframes shown in the GUI to illustrate the CSV layout each chart type expects.
+_XY_SAMPLE = pd.DataFrame({
+    "x": [0, 1, 2, 3, 4],
+    "SeriesA": [1.0, 1.5, 2.1, 2.0, 2.8],
+    "SeriesB": [2.0, 1.8, 1.2, 1.6, 1.1],
+})
+_CATEGORY_SAMPLE = pd.DataFrame({
+    "month": ["Jan.", "Feb.", "Mar."],
+    "A": [1, 2, 3],
+    "B": [2, 3, 4],
+    "C": [4, 6, 8],
+})
+_VALUES_SAMPLE = pd.DataFrame({
+    "SeriesA": [1.2, 2.3, 1.8, 2.5, 1.1, 2.0, 1.6],
+    "SeriesB": [3.4, 2.9, 3.1, 3.6, 2.8, 3.0, 3.3],
+})
 
 
 @dataclass
@@ -35,6 +53,10 @@ class ChartType:
     draw: Callable[[object, pd.DataFrame, dict, dict], None]  # (ax, df, series, ctx) -> None
     field_keys: dict                               # override key -> widget key suffix (see series_fields),
                                                     # used by app.py to restore a saved config into session_state
+    csv_help: str                                  # one-line description of the expected CSV layout
+    sample_df: pd.DataFrame                        # small example dataframe shown in the GUI
+    categorical_x: bool = False                    # True if the X axis shows fixed category labels at integer
+                                                    # positions (bar, ...) rather than a real numeric/log scale
 
 
 # ==================== Line plot ====================
@@ -56,12 +78,14 @@ def _draw_line(ax, df: pd.DataFrame, series: dict, ctx: dict) -> None:
     x_col = ctx["x_col"]
     for col, overrides in series.items():
         spec = merge_series_spec(col, overrides, ctx["chart_defaults"])
-        ls = None if spec["linestyle"] == "None" else spec["linestyle"]
+        # Matplotlib treats linestyle=None as "use the rcParam default" (i.e. a solid line),
+        # so the "None" (no line) choice must stay the string "None", unlike marker=None
+        # which does mean "no marker".
         mk = None if spec["marker"] == "None" else spec["marker"]
         ax.plot(
             df[x_col], df[col],
             marker=mk, markersize=spec["markersize"],
-            linewidth=spec["linewidth"], linestyle=ls,
+            linewidth=spec["linewidth"], linestyle=spec["linestyle"],
             label=spec["label"], color=spec["color"],
         )
 
@@ -77,6 +101,8 @@ LINE = ChartType(
     series_fields=_line_series_fields,
     draw=_draw_line,
     field_keys=_LINE_FIELD_KEYS,
+    csv_help="First column = X values. Each remaining column = one series (its header becomes the series name).",
+    sample_df=_XY_SAMPLE,
 )
 
 
@@ -123,6 +149,8 @@ HIST = ChartType(
     series_fields=_hist_series_fields,
     draw=_draw_hist,
     field_keys=_HIST_FIELD_KEYS,
+    csv_help="No X column needed. Each column = one series of raw values to bin (its header becomes the series name).",
+    sample_df=_VALUES_SAMPLE,
 )
 
 
@@ -159,6 +187,8 @@ PDF = ChartType(
     series_fields=_pdf_series_fields,
     draw=_draw_pdf,
     field_keys=_PDF_FIELD_KEYS,
+    csv_help="No X column needed. Each column = one series of raw values to bin (its header becomes the series name).",
+    sample_df=_VALUES_SAMPLE,
 )
 
 
@@ -197,6 +227,8 @@ CDF = ChartType(
     series_fields=_cum_series_fields,
     draw=_draw_cdf,
     field_keys=_CUM_FIELD_KEYS,
+    csv_help="No X column needed. Each column = one series of raw values to bin (its header becomes the series name).",
+    sample_df=_VALUES_SAMPLE,
 )
 
 
@@ -224,7 +256,50 @@ CCDF = ChartType(
     series_fields=_cum_series_fields,
     draw=_draw_ccdf,
     field_keys=_CUM_FIELD_KEYS,
+    csv_help="No X column needed. Each column = one series of raw values to bin (its header becomes the series name).",
+    sample_df=_VALUES_SAMPLE,
 )
 
 
-CHART_TYPES = {ct.key: ct for ct in [LINE, HIST, PDF, CDF, CCDF]}
+# ==================== Bar chart ====================
+# Grouped (side-by-side) bars: one group per row of the first (X) column,
+# one bar per selected series within the group.
+
+_BAR_FIELD_KEYS = {"alpha": "alpha"}
+
+
+def _bar_series_fields(col: str, key_prefix: str) -> dict:
+    return {"alpha": st.slider("Transparency (alpha)", 0.0, 1.0, 1.0, key=f"{key_prefix}_{col}_{_BAR_FIELD_KEYS['alpha']}")}
+
+
+def _draw_bar(ax, df: pd.DataFrame, series: dict, ctx: dict) -> None:
+    x_col = ctx["x_col"]
+    n = len(series)
+    x = np.arange(len(df))
+    width = 0.8 / n
+    for i, (col, overrides) in enumerate(series.items()):
+        spec = merge_series_spec(col, overrides, ctx["chart_defaults"])
+        offset = (i - (n - 1) / 2) * width
+        ax.bar(x + offset, df[col], width=width, alpha=spec["alpha"], color=spec["color"], label=spec["label"])
+    ax.set_xticks(x)
+    ax.set_xticklabels(df[x_col])
+
+
+BAR = ChartType(
+    key="bar",
+    display="Bar chart",
+    uses_x_column=True,
+    needs_bins=False,
+    series_defaults={"color": None, "alpha": 1.0},
+    default_xlabel=lambda df: df.columns[0],
+    default_ylabel="Value",
+    series_fields=_bar_series_fields,
+    draw=_draw_bar,
+    field_keys=_BAR_FIELD_KEYS,
+    csv_help="First column = X-axis category labels (one bar group per row). Header row's remaining column names become the series (legend) labels.",
+    sample_df=_CATEGORY_SAMPLE,
+    categorical_x=True,
+)
+
+
+CHART_TYPES = {ct.key: ct for ct in [LINE, BAR, HIST, PDF, CDF, CCDF]}
