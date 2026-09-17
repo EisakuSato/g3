@@ -58,6 +58,7 @@ class ChartType:
     categorical_x: bool = False                    # True if the X axis shows fixed category labels at integer
                                                     # positions (bar, ...) rather than a real numeric/log scale
     supports_value_labels: bool = False            # True if a "show values above bars" chart-wide option applies
+    supports_stacking: bool = False                # True if a "stack bars" chart-wide option applies
 
 
 # ==================== Line plot ====================
@@ -263,8 +264,9 @@ CCDF = ChartType(
 
 
 # ==================== Bar chart ====================
-# Grouped (side-by-side) bars: one group per row of the first (X) column,
-# one bar per selected series within the group.
+# Either grouped (side-by-side) bars -- one group per row of the first (X)
+# column, one bar per selected series within the group -- or, when "stacked"
+# is on, one bar per row with each series stacked on top of the previous one.
 
 _BAR_FIELD_KEYS = {"alpha": "alpha"}
 
@@ -273,20 +275,38 @@ def _bar_series_fields(col: str, key_prefix: str) -> dict:
     return {"alpha": st.slider("Transparency (alpha)", 0.0, 1.0, 1.0, key=f"{key_prefix}_{col}_{_BAR_FIELD_KEYS['alpha']}")}
 
 
+def _bar_label_kwargs(ctx: dict, label_type: str) -> dict:
+    kwargs = {"fmt": ctx["value_fmt"], "label_type": label_type}
+    if label_type == "edge":
+        kwargs["padding"] = 2
+    if ctx.get("value_fontsize"):
+        kwargs["fontsize"] = ctx["value_fontsize"]
+    return kwargs
+
+
 def _draw_bar(ax, df: pd.DataFrame, series: dict, ctx: dict) -> None:
     x_col = ctx["x_col"]
-    n = len(series)
     x = np.arange(len(df))
-    width = 0.8 / n
-    for i, (col, overrides) in enumerate(series.items()):
-        spec = merge_series_spec(col, overrides, ctx["chart_defaults"])
-        offset = (i - (n - 1) / 2) * width
-        bars = ax.bar(x + offset, df[col], width=width, alpha=spec["alpha"], color=spec["color"], label=spec["label"])
-        if ctx.get("show_values"):
-            bar_label_kwargs = {"fmt": ctx["value_fmt"], "padding": 2}
-            if ctx.get("value_fontsize"):
-                bar_label_kwargs["fontsize"] = ctx["value_fontsize"]
-            ax.bar_label(bars, **bar_label_kwargs)
+    if ctx.get("stacked"):
+        bottoms = np.zeros(len(df))
+        for col, overrides in series.items():
+            spec = merge_series_spec(col, overrides, ctx["chart_defaults"])
+            values = df[col].to_numpy(dtype=float)
+            bars = ax.bar(x, values, width=0.8, bottom=bottoms, alpha=spec["alpha"], color=spec["color"], label=spec["label"])
+            if ctx.get("show_values"):
+                # "center" (rather than the grouped case's "edge") so each segment's label
+                # sits inside its own slice instead of at the boundary with the segment above it.
+                ax.bar_label(bars, **_bar_label_kwargs(ctx, "center"))
+            bottoms += values
+    else:
+        n = len(series)
+        width = 0.8 / n
+        for i, (col, overrides) in enumerate(series.items()):
+            spec = merge_series_spec(col, overrides, ctx["chart_defaults"])
+            offset = (i - (n - 1) / 2) * width
+            bars = ax.bar(x + offset, df[col], width=width, alpha=spec["alpha"], color=spec["color"], label=spec["label"])
+            if ctx.get("show_values"):
+                ax.bar_label(bars, **_bar_label_kwargs(ctx, "edge"))
     ax.set_xticks(x)
     ax.set_xticklabels(df[x_col])
 
@@ -306,6 +326,7 @@ BAR = ChartType(
     sample_df=_CATEGORY_SAMPLE,
     categorical_x=True,
     supports_value_labels=True,
+    supports_stacking=True,
 )
 
 

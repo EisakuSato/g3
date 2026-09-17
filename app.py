@@ -247,6 +247,7 @@ def apply_saved_config(text: str, df: pd.DataFrame):
     set_if_present("VALUE_FMT", "value_fmt_input")
     if "VALUE_LABEL_FONTSIZE" in values:
         updates["value_label_fontsize_input"] = values["VALUE_LABEL_FONTSIZE"] or 0.0
+    set_if_present("STACKED", "stacked_checkbox", bool)
 
     if series is not None:
         key_prefix = f"ax1_{chart_key}"
@@ -336,6 +337,8 @@ def build_config_text(chart_type, series, settings: dict) -> str:
         lines.append(f"VALUE_FMT = {settings['value_fmt']!r}")
         value_label_fontsize_val = settings["value_label_fontsize"] if settings["value_label_fontsize"] > 0 else None
         lines.append(f"VALUE_LABEL_FONTSIZE = {value_label_fontsize_val!r}")
+    if chart_type.supports_stacking:
+        lines.append(f"STACKED = {settings['stacked']!r}")
     return "\n".join(lines)
 
 
@@ -482,6 +485,10 @@ def main():
             st.sidebar.error("Axis range values must be numbers")
             st.stop()
 
+    stacked = False
+    if chart_type.supports_stacking or (chart_type2 is not None and chart_type2.supports_stacking):
+        stacked = st.sidebar.checkbox("Stack bars (instead of side-by-side)", value=False, key="stacked_checkbox")
+
     show_values = False
     value_fmt = "%.2f"
     if chart_type.supports_value_labels or (chart_type2 is not None and chart_type2.supports_value_labels):
@@ -616,6 +623,7 @@ def main():
         "show_values": show_values,
         "value_fmt": value_fmt,
         "value_fontsize": value_label_fontsize if value_label_fontsize > 0 else None,
+        "stacked": stacked,
     }
     try:
         chart_type.draw(ax, df, series, ctx)
@@ -644,6 +652,7 @@ def main():
                 "show_values": show_values,
                 "value_fmt": value_fmt,
                 "value_fontsize": value_label_fontsize if value_label_fontsize > 0 else None,
+                "stacked": stacked,
             }
             chart_type2.draw(ax2, df, series2, ctx2)
             ax2.set_ylabel(ylabel2)
@@ -692,6 +701,7 @@ def main():
         "axis_label_fontsize": axis_label_fontsize, "tick_fontsize": tick_fontsize,
         "legend_fontsize": legend_fontsize, "dpi": dpi, "n_bins": n_bins,
         "show_values": show_values, "value_fmt": value_fmt, "value_label_fontsize": value_label_fontsize,
+        "stacked": stacked,
     })
 
     format_info = OUTPUT_FORMATS[output_format]
