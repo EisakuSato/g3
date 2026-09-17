@@ -57,6 +57,7 @@ class ChartType:
     sample_df: pd.DataFrame                        # small example dataframe shown in the GUI
     categorical_x: bool = False                    # True if the X axis shows fixed category labels at integer
                                                     # positions (bar, ...) rather than a real numeric/log scale
+    supports_value_labels: bool = False            # True if a "show values above bars" chart-wide option applies
 
 
 # ==================== Line plot ====================
@@ -280,7 +281,9 @@ def _draw_bar(ax, df: pd.DataFrame, series: dict, ctx: dict) -> None:
     for i, (col, overrides) in enumerate(series.items()):
         spec = merge_series_spec(col, overrides, ctx["chart_defaults"])
         offset = (i - (n - 1) / 2) * width
-        ax.bar(x + offset, df[col], width=width, alpha=spec["alpha"], color=spec["color"], label=spec["label"])
+        bars = ax.bar(x + offset, df[col], width=width, alpha=spec["alpha"], color=spec["color"], label=spec["label"])
+        if ctx.get("show_values"):
+            ax.bar_label(bars, fmt=ctx["value_fmt"], padding=2)
     ax.set_xticks(x)
     ax.set_xticklabels(df[x_col])
 
@@ -299,6 +302,7 @@ BAR = ChartType(
     csv_help="First column = X-axis category labels (one bar group per row). Header row's remaining column names become the series (legend) labels.",
     sample_df=_CATEGORY_SAMPLE,
     categorical_x=True,
+    supports_value_labels=True,
 )
 
 

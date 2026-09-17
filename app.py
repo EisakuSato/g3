@@ -239,6 +239,8 @@ def apply_saved_config(text: str, df: pd.DataFrame):
         updates["tick_fontsize_input"] = values["TICK_FONTSIZE"] or 0.0
     set_if_present("DPI", "dpi_input", int)
     set_if_present("N_BINS", "n_bins_input", int)
+    set_if_present("SHOW_VALUES", "show_values_checkbox", bool)
+    set_if_present("VALUE_FMT", "value_fmt_input")
 
     if series is not None:
         key_prefix = f"ax1_{chart_key}"
@@ -319,6 +321,9 @@ def build_config_text(chart_type, series, settings: dict) -> str:
     lines.append(f"DPI = {int(settings['dpi'])!r}")
     if chart_type.needs_bins:
         lines.append(f"N_BINS = {int(settings['n_bins'])!r}")
+    if chart_type.supports_value_labels:
+        lines.append(f"SHOW_VALUES = {settings['show_values']!r}")
+        lines.append(f"VALUE_FMT = {settings['value_fmt']!r}")
     return "\n".join(lines)
 
 
@@ -465,6 +470,14 @@ def main():
             st.sidebar.error("Axis range values must be numbers")
             st.stop()
 
+    show_values = False
+    value_fmt = "%.2f"
+    if chart_type.supports_value_labels or (chart_type2 is not None and chart_type2.supports_value_labels):
+        show_values = st.sidebar.checkbox("Show values above bars", value=False, key="show_values_checkbox")
+        value_fmt = st.sidebar.text_input(
+            "Value format", value="%.2f", disabled=not show_values, key="value_fmt_input",
+        )
+
     use_scienceplots = st.sidebar.checkbox(
         "Use scienceplots", value=True,
         help="Turn off to use plain matplotlib settings (no LaTeX required), with fonts etc. adjustable individually",
@@ -582,6 +595,8 @@ def main():
         "xscale": xscale,
         "n_bins": n_bins,
         "chart_defaults": chart_type.series_defaults,
+        "show_values": show_values,
+        "value_fmt": value_fmt,
     }
     try:
         chart_type.draw(ax, df, series, ctx)
@@ -604,6 +619,8 @@ def main():
                 "xscale": xscale,
                 "n_bins": n_bins,
                 "chart_defaults": chart_type2.series_defaults,
+                "show_values": show_values,
+                "value_fmt": value_fmt,
             }
             chart_type2.draw(ax2, df, series2, ctx2)
             ax2.set_ylabel(ylabel2)
@@ -646,6 +663,7 @@ def main():
         "legend_loc_value": legend_loc_value, "legend_ncol": legend_ncol, "legend_outside": legend_outside,
         "width_ratio": width_ratio, "height_ratio": height_ratio, "grid_on": grid_on,
         "tick_fontsize": tick_fontsize, "dpi": dpi, "n_bins": n_bins,
+        "show_values": show_values, "value_fmt": value_fmt,
     })
 
     format_info = OUTPUT_FORMATS[output_format]
