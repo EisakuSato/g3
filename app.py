@@ -235,12 +235,18 @@ def apply_saved_config(text: str, df: pd.DataFrame):
     if "HEIGHT_RATIO" in values:
         updates["height_ratio_input"] = values["HEIGHT_RATIO"] or 0.0
     set_if_present("GRID", "grid_checkbox", bool)
+    if "AXIS_LABEL_FONTSIZE" in values:
+        updates["axis_label_fontsize_input"] = values["AXIS_LABEL_FONTSIZE"] or 0.0
     if "TICK_FONTSIZE" in values:
         updates["tick_fontsize_input"] = values["TICK_FONTSIZE"] or 0.0
+    if "LEGEND_FONTSIZE" in values:
+        updates["legend_fontsize_input"] = values["LEGEND_FONTSIZE"] or 0.0
     set_if_present("DPI", "dpi_input", int)
     set_if_present("N_BINS", "n_bins_input", int)
     set_if_present("SHOW_VALUES", "show_values_checkbox", bool)
     set_if_present("VALUE_FMT", "value_fmt_input")
+    if "VALUE_LABEL_FONTSIZE" in values:
+        updates["value_label_fontsize_input"] = values["VALUE_LABEL_FONTSIZE"] or 0.0
 
     if series is not None:
         key_prefix = f"ax1_{chart_key}"
@@ -316,14 +322,20 @@ def build_config_text(chart_type, series, settings: dict) -> str:
     height_ratio_val = settings["height_ratio"] if settings["height_ratio"] > 0 else None
     lines.append(f"WIDTH_RATIO, HEIGHT_RATIO = {width_ratio_val!r}, {height_ratio_val!r}")
     lines.append(f"GRID = {settings['grid_on']!r}")
+    axis_label_fontsize_val = settings["axis_label_fontsize"] if settings["axis_label_fontsize"] > 0 else None
+    lines.append(f"AXIS_LABEL_FONTSIZE = {axis_label_fontsize_val!r}")
     tick_fontsize_val = settings["tick_fontsize"] if settings["tick_fontsize"] > 0 else None
     lines.append(f"TICK_FONTSIZE = {tick_fontsize_val!r}")
+    legend_fontsize_val = settings["legend_fontsize"] if settings["legend_fontsize"] > 0 else None
+    lines.append(f"LEGEND_FONTSIZE = {legend_fontsize_val!r}")
     lines.append(f"DPI = {int(settings['dpi'])!r}")
     if chart_type.needs_bins:
         lines.append(f"N_BINS = {int(settings['n_bins'])!r}")
     if chart_type.supports_value_labels:
         lines.append(f"SHOW_VALUES = {settings['show_values']!r}")
         lines.append(f"VALUE_FMT = {settings['value_fmt']!r}")
+        value_label_fontsize_val = settings["value_label_fontsize"] if settings["value_label_fontsize"] > 0 else None
+        lines.append(f"VALUE_LABEL_FONTSIZE = {value_label_fontsize_val!r}")
     return "\n".join(lines)
 
 
@@ -528,9 +540,15 @@ def main():
         help="'(style default)' leaves the active style's own color cycle untouched",
         key="palette_select",
     )
-    tick_fontsize = st.sidebar.number_input(
-        "Tick label font size (0 = auto)", value=0.0, step=1.0, key="tick_fontsize_input",
-    )
+    st.sidebar.markdown("**Font sizes (0 = use style default)**")
+    c1, c2 = st.sidebar.columns(2)
+    axis_label_fontsize = c1.number_input("Axis label", value=0.0, step=1.0, key="axis_label_fontsize_input")
+    tick_fontsize = c2.number_input("Tick label", value=0.0, step=1.0, key="tick_fontsize_input")
+    c3, c4 = st.sidebar.columns(2)
+    legend_fontsize = c3.number_input("Legend", value=0.0, step=1.0, key="legend_fontsize_input")
+    value_label_fontsize = 0.0
+    if chart_type.supports_value_labels or (chart_type2 is not None and chart_type2.supports_value_labels):
+        value_label_fontsize = c4.number_input("Bar value labels", value=0.0, step=1.0, key="value_label_fontsize_input")
     grid_on = st.sidebar.checkbox("Show grid", value=False, key="grid_checkbox")
     n_bins = (
         st.sidebar.number_input("Number of bins", value=100, step=10, key="n_bins_input")
@@ -597,12 +615,16 @@ def main():
         "chart_defaults": chart_type.series_defaults,
         "show_values": show_values,
         "value_fmt": value_fmt,
+        "value_fontsize": value_label_fontsize if value_label_fontsize > 0 else None,
     }
     try:
         chart_type.draw(ax, df, series, ctx)
 
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)
+        if axis_label_fontsize > 0:
+            ax.xaxis.label.set_fontsize(axis_label_fontsize)
+            ax.yaxis.label.set_fontsize(axis_label_fontsize)
         if not chart_type.categorical_x:
             # set_xscale() rebuilds the axis's tick locator/formatter, which would wipe out
             # the fixed category labels a categorical chart type (e.g. bar) just set.
@@ -621,9 +643,12 @@ def main():
                 "chart_defaults": chart_type2.series_defaults,
                 "show_values": show_values,
                 "value_fmt": value_fmt,
+                "value_fontsize": value_label_fontsize if value_label_fontsize > 0 else None,
             }
             chart_type2.draw(ax2, df, series2, ctx2)
             ax2.set_ylabel(ylabel2)
+            if axis_label_fontsize > 0:
+                ax2.yaxis.label.set_fontsize(axis_label_fontsize)
             ax2.set_yscale(yscale2)
             ax2.set_ylim(ymin2, ymax2)
 
@@ -637,6 +662,8 @@ def main():
             labels += l
         if legend_loc_value is not None and handles:
             legend_kwargs = {"frameon": False, "ncol": int(legend_ncol)}
+            if legend_fontsize > 0:
+                legend_kwargs["fontsize"] = legend_fontsize
             if legend_outside:
                 legend_kwargs.update(loc="upper center", bbox_to_anchor=(0.5, -0.15))
             else:
@@ -662,8 +689,9 @@ def main():
         "xscale": xscale, "yscale": yscale, "style": style, "palette_key": palette_key,
         "legend_loc_value": legend_loc_value, "legend_ncol": legend_ncol, "legend_outside": legend_outside,
         "width_ratio": width_ratio, "height_ratio": height_ratio, "grid_on": grid_on,
-        "tick_fontsize": tick_fontsize, "dpi": dpi, "n_bins": n_bins,
-        "show_values": show_values, "value_fmt": value_fmt,
+        "axis_label_fontsize": axis_label_fontsize, "tick_fontsize": tick_fontsize,
+        "legend_fontsize": legend_fontsize, "dpi": dpi, "n_bins": n_bins,
+        "show_values": show_values, "value_fmt": value_fmt, "value_label_fontsize": value_label_fontsize,
     })
 
     format_info = OUTPUT_FORMATS[output_format]

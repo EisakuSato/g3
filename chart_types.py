@@ -283,7 +283,10 @@ def _draw_bar(ax, df: pd.DataFrame, series: dict, ctx: dict) -> None:
         offset = (i - (n - 1) / 2) * width
         bars = ax.bar(x + offset, df[col], width=width, alpha=spec["alpha"], color=spec["color"], label=spec["label"])
         if ctx.get("show_values"):
-            ax.bar_label(bars, fmt=ctx["value_fmt"], padding=2)
+            bar_label_kwargs = {"fmt": ctx["value_fmt"], "padding": 2}
+            if ctx.get("value_fontsize"):
+                bar_label_kwargs["fontsize"] = ctx["value_fontsize"]
+            ax.bar_label(bars, **bar_label_kwargs)
     ax.set_xticks(x)
     ax.set_xticklabels(df[x_col])
 
